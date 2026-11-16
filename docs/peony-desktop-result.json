@@ -1,0 +1,12 @@
+{
+  "host": "installed peony-qt-desktop",
+  "display": "isolated Xvfb 1280x900",
+  "manager_and_three_sizes": true,
+  "menu_pause_interval_and_resize": true,
+  "host_drag": true,
+  "host_instance_removal": true,
+  "dark_theme": true,
+  "double_click_opens_installed_details": true,
+  "details_light_and_dark_capture": true,
+  "restart_preserves_config_and_reloads_module": true
+}

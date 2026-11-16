@@ -1,0 +1,34 @@
+[
+  {
+    "Resizable": false,
+    "SizeHint": [
+      2,
+      2
+    ],
+    "height": 136,
+    "id": "org.ukui.kylin-monitor",
+    "instanceId": 0,
+    "interval": 2000,
+    "paused": true,
+    "settingsVersion": 1,
+    "variantId": "medium",
+    "width": 296,
+    "x": 10,
+    "y": 5
+  },
+  {
+    "Resizable": false,
+    "SizeHint": [
+      4,
+      2
+    ],
+    "height": 136,
+    "id": "org.ukui.kylin-monitor",
+    "instanceId": 1,
+    "settingsVersion": 1,
+    "variantId": "medium",
+    "width": 296,
+    "x": 393,
+    "y": 157
+  }
+]

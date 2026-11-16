@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Kylin Monitor
+Name[zh_CN]=系统监测
+Comment=CPU, GPU and memory monitor
+Comment[zh_CN]=CPU、GPU 与内存监测小组件
+Exec=kylin-monitor --detail
+Icon=kylin-monitor
+Terminal=false
+Categories=System;Monitor;
+StartupNotify=true

@@ -1,0 +1,31 @@
+{
+  "Id": "org.ukui.kylin-monitor",
+  "Authors": [{"Name": "Kylin Monitor contributors"}],
+  "Name": "System Monitor",
+  "Name[zh_CN]": "系统监测",
+  "Icon": "kylin-monitor",
+  "Tooltip": "CPU, GPU and memory utilization and temperature",
+  "Tooltip[zh_CN]": "CPU、GPU 和内存利用率及温度",
+  "Description": "Live resource bars with a detailed performance window",
+  "Description[zh_CN]": "实时资源柱状图，双击查看详细性能信息",
+  "Version": "1.1.0",
+  "License": "GPL-3.0-or-later",
+  "ShowIn": "Desktop",
+  "Contents": {
+    "Main": "main.qml",
+    "Layer": 0,
+    "Dragable": true,
+    "Resizable": false,
+    "SizePolicy": 1,
+    "DoDecoration": true,
+    "DoBlur": true,
+    "ShowInManager": true,
+    "SizeHint": [4, 2],
+    "GridUnitSize": 60,
+    "ManagerSizes": [
+      {"id": "small", "description": "Compact resource bars", "description[zh_CN]": "紧凑资源柱状图"},
+      {"id": "medium", "description": "Wide resource bars", "description[zh_CN]": "横向资源柱状图"},
+      {"id": "large", "description": "Large resource bars", "description[zh_CN]": "大尺寸资源柱状图"}
+    ]
+  }
+}
