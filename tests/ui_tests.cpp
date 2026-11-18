@@ -2,7 +2,11 @@
 #include "ui/mini_window.h"
 #include "ui/resource_tile.h"
 #include "ui/theme.h"
+#include "ui/flow_layout.h"
 #include <QComboBox>
+#include <QLabel>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -15,6 +19,8 @@ private slots:
     void historyExpiresByTimeAndRemovesDevices();
     void detailSwitchesResourceAndEmitsControls();
     void miniHasOnlyPaintedBarsAndOpensDetail();
+    void narrowWindowKeepsLongPerformanceTextReachable();
+    void controlsReflowWithoutShrinkingText();
 };
 namespace {
 Snapshot sampleSnapshot()
@@ -49,10 +55,10 @@ void UiTests::detailSwitchesResourceAndEmitsControls()
     QSignalSpy interval(&window, &DetailWindow::intervalRequested);
     for (auto *button : window.findChildren<QPushButton *>()) {
         if (button->objectName() == "primary") QTest::mouseClick(button, Qt::LeftButton);
-        if (button->text() == QStringLiteral("暂停")) QTest::mouseClick(button, Qt::LeftButton);
+        if (button->objectName() == "performancePause") QTest::mouseClick(button, Qt::LeftButton);
     }
     QCOMPARE(mini.count(), 1); QCOMPARE(pause.count(), 1);
-    window.findChild<QComboBox *>()->setCurrentIndex(2); QCOMPARE(interval.count(), 1); QCOMPARE(interval.first().first().toInt(), 2000);
+    window.findChild<QComboBox *>("performanceInterval")->setCurrentIndex(2); QCOMPARE(interval.count(), 1); QCOMPARE(interval.first().first().toInt(), 2000);
     QVERIFY(!window.grab().isNull());
 }
 void UiTests::miniHasOnlyPaintedBarsAndOpensDetail()
@@ -64,6 +70,47 @@ void UiTests::miniHasOnlyPaintedBarsAndOpensDetail()
     QTest::mouseDClick(&window, Qt::LeftButton); QCOMPARE(detail.count(), 1);
     QTest::keyClick(&window, Qt::Key_Escape); QCOMPARE(detail.count(), 2);
     QVERIFY(!window.grab().isNull());
+}
+void UiTests::narrowWindowKeepsLongPerformanceTextReachable()
+{
+    MonitorModel model; auto snapshot = sampleSnapshot();
+    snapshot.resources[0].name = QString(180, 'W') + QStringLiteral("处理器完整名称");
+    snapshot.resources[0].details.insert(QStringLiteral("路径"), QString(200, 'X'));
+    snapshot.resources[0].temperature = Metric::unavailable(QStringLiteral("没有温度传感器，") .repeated(20));
+    model.acceptSnapshot(snapshot);
+    DetailWindow window(&model);
+    QFont larger = window.font(); larger.setPointSizeF(larger.pointSizeF() * 1.5); window.setFont(larger);
+    window.resize(760, 500); window.show();
+    QTest::qWait(40);
+    QCOMPARE(window.size(), QSize(760, 500));
+    for (auto *tile : window.findChildren<ResourceTile *>())
+        QVERIFY(tile->height() >= tile->heightForWidth(tile->width()));
+    auto *scroll = window.findChild<QScrollArea *>("performanceScroll"); QVERIFY(scroll);
+    QVERIFY(scroll->widget()->width() <= scroll->viewport()->width());
+    QVERIFY(scroll->verticalScrollBar()->maximum() > 0);
+    for (auto *label : scroll->widget()->findChildren<QLabel *>()) {
+        if (!label->isVisible() || label->text().isEmpty()) continue;
+        QVERIFY2(label->width() > 0, qPrintable(label->objectName()));
+        QVERIFY2(label->height() >= label->heightForWidth(label->width()), qPrintable(label->objectName()));
+    }
+    scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
+    auto *pause = window.findChild<QPushButton *>("performancePause");
+    const auto position = pause->mapTo(scroll->viewport(), QPoint(0, 0));
+    QVERIFY(scroll->viewport()->rect().contains(QRect(position, pause->size())));
+}
+void UiTests::controlsReflowWithoutShrinkingText()
+{
+    QWidget host; auto *layout = new FlowLayout(&host);
+    auto *first = new QPushButton(QStringLiteral("结束进程"));
+    auto *second = new QPushButton(QStringLiteral("强制结束进程"));
+    layout->addWidget(first); layout->addWidget(second);
+    host.resize(qMax(first->sizeHint().width(), second->sizeHint().width()) + 10, 200); host.show();
+    QTest::qWait(10);
+    QVERIFY(second->y() >= first->geometry().bottom());
+    QVERIFY(first->width() >= first->sizeHint().width());
+    QVERIFY(second->width() >= second->sizeHint().width());
+    host.resize(600, 200); QTest::qWait(10);
+    QCOMPARE(second->y(), first->y());
 }
 QTEST_MAIN(UiTests)
 #include "ui_tests.moc"

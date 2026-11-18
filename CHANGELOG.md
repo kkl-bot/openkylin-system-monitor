@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.1 — 2026-11-18
+
+- Reflow controls and performance cards in smaller windows, keeping long text reachable by scrolling.
+- Size process columns, rows, resource tiles and chart labels using font metrics; preserve manually adjusted columns.
+- Show complete, escaped text in hover hints and wrap long process command lines.
+- Add real-data layout captures for compact, standard and enlarged-font windows.
+
+## 1.2.0 — 2026-11-16
+
+- Add a task-manager process page alongside the existing performance charts.
+- Show process identity, owner, state, CPU share, resident memory, threads and disk read/write rates, with numeric sorting and filtering.
+- Add read-only process details and confirmed graceful / force termination for eligible processes owned by the current user, using pidfd and start-time checks.
+- Sample processes in a dedicated worker only while the process page is visible; support pause and manual refresh.
+- Keep process collection, control, models, dialogs and controller wiring in separate new files, with dedicated tests.
+
 ## 1.1.0 — 2026-11-16
 
 - Add a native Peony / ukui-quick desktop widget with system-managed small, medium and large variants.

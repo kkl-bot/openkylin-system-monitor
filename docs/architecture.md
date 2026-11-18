@@ -16,6 +16,26 @@ DetailWindow / MiniWindow / HistoryChart / ResourceTile
 
 `ApplicationController` 负责服务与界面的连接、持久化和托盘。它不包含任何硬件解析逻辑。
 
+## 任务管理器分支（1.2）
+
+```text
+/proc → ProcessCollector → ProcessSamplingThread → ProcessService
+                                                      ↓
+                                                ProcessController
+                                                      ↓
+ProcessPage ← ProcessFilterModel ← ProcessTableModel ← ProcessSnapshot
+     ↓
+身份确认 → ProcessController → ProcessControl → Linux pidfd
+```
+
+进程分支使用单独的 `process_backend` 库，不加入 Peony 动态模块。进程身份由 PID、
+启动时间和 UID 组成，视图在刷新或排序后仍按身份恢复选择。数据和操作均与 Qt Widgets
+解耦，详情对话框及表格只消费快照，不直接读取 procfs 或发送信号。
+
+进程页隐藏、窗口最小化或切到性能页后停止扫描。恢复时重建差值基线，使用 generation
+丢弃旧请求的结果；暂停时允许一次手动刷新。窗口退出前唤醒并等待后台线程结束。
+进程扫描与原有性能采样独立，详细指标口径和操作保护见 [任务管理器说明](task-manager.md)。
+
 ## Peony 原生插件分支（1.1）
 
 ```text

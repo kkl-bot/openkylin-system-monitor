@@ -22,7 +22,7 @@ void applyTheme(QApplication &application)
     for (const auto &candidate : candidates) {
         if (families.contains(candidate)) { font.setFamily(candidate); break; }
     }
-    font.setPointSize(10);
+    if (font.pointSizeF() <= 0 && font.pixelSize() <= 0) font.setPointSize(10);
     application.setFont(font);
     application.setStyleSheet(QStringLiteral(R"(
         QWidget { color: palette(window-text); }

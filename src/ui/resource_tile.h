@@ -8,9 +8,14 @@ class ResourceTile final : public QPushButton {
 public:
     ResourceTile(MonitorModel *model, const QString &id, QWidget *parent = nullptr);
     QString resourceId() const;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+    int heightForWidth(int width) const override;
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void changeEvent(QEvent *event) override;
 private:
+    void refresh();
     MonitorModel *model_;
     QString id_;
 };

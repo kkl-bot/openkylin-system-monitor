@@ -1,6 +1,8 @@
 #include "ui/detail_window.h"
 #include "ui/history_chart.h"
 #include "ui/resource_tile.h"
+#include "ui/process_page.h"
+#include "ui/flow_layout.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -10,7 +12,12 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QStackedWidget>
+#include <QShowEvent>
+#include <QHideEvent>
 #include <QVBoxLayout>
+#include <QGridLayout>
+#include <QResizeEvent>
 
 namespace monitor::ui {
 namespace {
@@ -19,6 +26,7 @@ QLabel *label(const QString &text, const QString &name, QWidget *parent = nullpt
     auto *result = new QLabel(text, parent);
     result->setObjectName(name);
     result->setTextFormat(Qt::PlainText);
+    result->setWordWrap(true);
     return result;
 }
 QFrame *metricCard(const QString &text, QLabel **value, QLabel **caption = nullptr)
@@ -28,9 +36,11 @@ QFrame *metricCard(const QString &text, QLabel **value, QLabel **caption = nullp
     auto *layout = new QVBoxLayout(card);
     layout->setContentsMargins(18, 13, 18, 14);
     auto *title = label(text, "cardLabel");
+    title->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     if (caption) *caption = title;
     layout->addWidget(title);
     *value = label(QStringLiteral("—"), "cardValue");
+    (*value)->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     layout->addWidget(*value);
     return card;
 }
@@ -40,42 +50,61 @@ DetailWindow::DetailWindow(MonitorModel *model, QWidget *parent) : QWidget(paren
 {
     setObjectName("detailWindow");
     setWindowTitle(QStringLiteral("系统监测 · Kylin Monitor"));
-    resize(1040, 780);
-    setMinimumSize(880, 700);
+    resize(1180, 780);
+    setMinimumSize(760, 500);
     auto *root = new QHBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0); root->setSpacing(0);
     auto *sidebar = new QFrame; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(232);
+    sidebar_ = sidebar;
     auto *side = new QVBoxLayout(sidebar); side->setContentsMargins(16, 30, 16, 24); side->setSpacing(8);
-    side->addWidget(label(QStringLiteral("系统监测"), "brand"));
+    side->addWidget(label(QStringLiteral("任务管理器"), "brand"));
     side->addWidget(label("KYLIN  /  MONITOR", "eyebrow"));
-    side->addSpacing(30);
+    side->addSpacing(20);
+    processNavigation_ = new QPushButton(QStringLiteral("进程"));
+    processNavigation_->setObjectName("processNavigation");
+    processNavigation_->setCheckable(true);
+    side->addWidget(processNavigation_);
+    side->addSpacing(12);
     side->addWidget(label(QStringLiteral("资源概览"), "muted"));
     side->addSpacing(8);
     auto *resourceHost = new QWidget; resourceHost->setObjectName("resourceHost");
-    resourcesLayout_ = new QVBoxLayout(resourceHost); resourcesLayout_->setContentsMargins(0, 0, 0, 0);
+    auto *resourceContent = new QVBoxLayout(resourceHost); resourceContent->setContentsMargins(0, 0, 0, 0);
+    resourceContent->setSizeConstraint(QLayout::SetMinAndMaxSize);
+    auto *resourceCards = new QWidget;
+    resourcesLayout_ = new QVBoxLayout(resourceCards); resourcesLayout_->setContentsMargins(0, 0, 0, 0);
     resourcesLayout_->setSpacing(8); resourcesLayout_->addStretch();
+    resourceContent->addWidget(resourceCards, 1);
     auto *scroll = new QScrollArea; scroll->setWidgetResizable(true); scroll->setWidget(resourceHost);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     side->addWidget(scroll, 1);
     environment_ = label("openKylin · Linux", "muted"); environment_->setWordWrap(true);
-    side->addWidget(environment_);
-    side->addWidget(label(QStringLiteral("让系统状态，一目了然。"), "eyebrow"));
+    resourceContent->addWidget(environment_);
+    resourceContent->addWidget(label(QStringLiteral("让系统状态，一目了然。"), "eyebrow"));
     root->addWidget(sidebar);
 
-    auto *main = new QVBoxLayout; main->setContentsMargins(32, 28, 30, 20); main->setSpacing(14);
+    pages_ = new QStackedWidget;
+    auto *performance = new QWidget;
+    performance->setObjectName("performanceContent");
+    auto *main = new QVBoxLayout(performance); main->setContentsMargins(32, 28, 30, 20); main->setSpacing(14);
+    performanceLayout_ = main;
+    main->setSizeConstraint(QLayout::SetMinAndMaxSize);
     auto *top = new QHBoxLayout;
     title_ = label("CPU", "pageTitle"); top->addWidget(title_); top->addStretch();
+    title_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     status_ = label(QStringLiteral("●  实时监测"), "live"); top->addWidget(status_); top->addSpacing(12);
+    status_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     auto *mini = new QPushButton(QStringLiteral("极简模式 ↗")); mini->setObjectName("primary");
     mini->setToolTip(QStringLiteral("切换为仅显示柱状图的桌面悬浮窗")); top->addWidget(mini);
     main->addLayout(top);
     subtitle_ = label(QStringLiteral("正在读取处理器信息…"), "subtitle"); subtitle_->setWordWrap(true); main->addWidget(subtitle_);
+    subtitle_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     main->addSpacing(4);
-    auto *cards = new QHBoxLayout; cards->setSpacing(12);
-    cards->addWidget(metricCard(QStringLiteral("利用率"), &usage_), 1);
-    cards->addWidget(metricCard(QStringLiteral("温度 · 最高传感器读数"), &temperature_), 1);
-    cards->addWidget(metricCard(QStringLiteral("逻辑处理器"), &capacity_, &capacityLabel_), 1);
-    main->addLayout(cards);
+    cardsLayout_ = new QGridLayout; cardsLayout_->setSpacing(12);
+    cards_ = {metricCard(QStringLiteral("利用率"), &usage_),
+              metricCard(QStringLiteral("温度 · 最高传感器读数"), &temperature_),
+              metricCard(QStringLiteral("逻辑处理器"), &capacity_, &capacityLabel_)};
+    for (int i = 0; i < cards_.size(); ++i) cardsLayout_->addWidget(cards_[i], 0, i);
+    main->addLayout(cardsLayout_);
     auto *chartHeading = new QHBoxLayout;
     chartHeading->addWidget(label(QStringLiteral("利用率"), "sectionTitle")); chartHeading->addStretch();
     chartHeading->addWidget(label(QStringLiteral("最近 60 秒"), "muted")); main->addLayout(chartHeading);
@@ -84,21 +113,39 @@ DetailWindow::DetailWindow(MonitorModel *model, QWidget *parent) : QWidget(paren
     temperatureChart_ = new HistoryChart(model, true); main->addWidget(temperatureChart_, 2);
     notice_ = label({}, "notice"); notice_->setWordWrap(true); notice_->setMinimumHeight(32); main->addWidget(notice_);
     details_ = label({}, "muted"); details_->setWordWrap(true); main->addWidget(details_);
+    notice_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    details_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto *line = new QFrame; line->setFrameShape(QFrame::HLine); main->addWidget(line);
-    auto *bottom = new QHBoxLayout;
-    timestamp_ = label(QStringLiteral("等待首次采样"), "muted"); bottom->addWidget(timestamp_); bottom->addStretch();
+    auto *bottom = new FlowLayout;
+    timestamp_ = label(QStringLiteral("等待首次采样"), "muted"); bottom->addWidget(timestamp_);
     bottom->addWidget(label(QStringLiteral("刷新"), "muted"));
     interval_ = new QComboBox;
+    interval_->setObjectName("performanceInterval");
     interval_->addItem(QStringLiteral("0.5 秒"), 500); interval_->addItem(QStringLiteral("1 秒"), 1000);
     interval_->addItem(QStringLiteral("2 秒"), 2000); interval_->addItem(QStringLiteral("5 秒"), 5000);
     interval_->setCurrentIndex(1); bottom->addWidget(interval_);
     pause_ = new QPushButton(QStringLiteral("暂停")); pause_->setCheckable(true); bottom->addWidget(pause_);
-    main->addLayout(bottom); root->addLayout(main, 1);
+    pause_->setObjectName("performancePause");
+    main->addLayout(bottom);
+    performanceScroll_ = new QScrollArea;
+    performanceScroll_->setObjectName("performanceScroll");
+    performanceScroll_->setWidgetResizable(true);
+    performanceScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    performanceScroll_->setWidget(performance);
+    pages_->addWidget(performanceScroll_);
+    processPage_ = new ProcessPage;
+    pages_->addWidget(processPage_);
+    root->addWidget(pages_, 1);
+    connect(processNavigation_, &QPushButton::clicked, this, &DetailWindow::showProcesses);
+    connect(pages_, &QStackedWidget::currentChanged, this, &DetailWindow::updateActivePage);
+    connect(processPage_, &ProcessPage::pauseRequested, this, &DetailWindow::pauseRequested);
+    connect(processPage_, &ProcessPage::intervalRequested, this, &DetailWindow::intervalRequested);
     connect(model_, &MonitorModel::changed, this, &DetailWindow::refresh);
     connect(mini, &QPushButton::clicked, this, &DetailWindow::miniRequested);
     connect(pause_, &QPushButton::toggled, this, &DetailWindow::pauseRequested);
     connect(interval_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { emit intervalRequested(interval_->currentData().toInt()); });
     refresh();
+    updateLayout();
 }
 void DetailWindow::rebuildResources()
 {
@@ -111,19 +158,37 @@ void DetailWindow::rebuildResources()
         resourcesLayout_->insertWidget(resourcesLayout_->count() - 1, tile);
         connect(tile, &QPushButton::clicked, this, [this, id]() { selectResource(id); });
     }
+    updateLayout();
 }
-void DetailWindow::selectResource(const QString &id) { selectedId_ = id; refresh(); }
+void DetailWindow::selectResource(const QString &id) { selectedId_ = id; pages_->setCurrentIndex(0); refresh(); }
+void DetailWindow::showProcesses() { pages_->setCurrentWidget(processPage_); updateActivePage(); }
+bool DetailWindow::showingProcesses() const { return pages_->currentWidget() == processPage_; }
+ProcessPage *DetailWindow::processPage() const { return processPage_; }
+void DetailWindow::updateActivePage()
+{
+    processNavigation_->setChecked(showingProcesses());
+    for (auto *tile : tiles_) {
+        tile->setAutoExclusive(false);
+        tile->setChecked(!showingProcesses() && tile->resourceId() == selectedId_);
+        tile->setAutoExclusive(true);
+    }
+    emit processPageActiveChanged(isVisible() && !isMinimized() && showingProcesses());
+}
 void DetailWindow::refresh()
 {
     rebuildResources();
     const auto *sample = model_->resource(selectedId_);
     if (!sample) return;
-    for (auto *tile : tiles_) tile->setChecked(tile->resourceId() == selectedId_);
+    for (auto *tile : tiles_) {
+        tile->setAutoExclusive(false);
+        tile->setChecked(!showingProcesses() && tile->resourceId() == selectedId_);
+        tile->setAutoExclusive(true);
+    }
     title_->setText(resourceLabel(sample->kind)); subtitle_->setText(sample->name);
     usage_->setText(formatMetric(sample->utilization, "%", 1));
     temperature_->setText(formatMetric(sample->temperature, " °C", 1));
-    usage_->setToolTip(sample->utilization.value ? sample->utilization.source : sample->utilization.reason);
-    temperature_->setToolTip(sample->temperature.value ? sample->temperature.source : sample->temperature.reason);
+    usage_->setToolTip((sample->utilization.value ? sample->utilization.source : sample->utilization.reason).toHtmlEscaped());
+    temperature_->setToolTip((sample->temperature.value ? sample->temperature.source : sample->temperature.reason).toHtmlEscaped());
     if (sample->kind == ResourceKind::Cpu) {
         capacityLabel_->setText(QStringLiteral("逻辑处理器")); capacity_->setText(sample->details.value(QStringLiteral("逻辑处理器"), "—"));
     } else {
@@ -140,19 +205,57 @@ void DetailWindow::refresh()
         if (it.key() != QStringLiteral("设备标识")) info.append(it.key() + "  " + it.value());
     }
     details_->setText(info.join(QStringLiteral("    ·    ")));
+    subtitle_->setToolTip(sample->name.toHtmlEscaped());
+    details_->setToolTip(details_->text().toHtmlEscaped());
+    capacity_->setToolTip(capacity_->text().toHtmlEscaped());
     environment_->setText(model_->snapshot().isWsl ? QStringLiteral("openKylin · WSL 2\nCPU / 内存反映 WSL 环境") : QStringLiteral("openKylin · Linux"));
     timestamp_->setText(QStringLiteral("更新于 ") + model_->snapshot().timestamp.toLocalTime().toString("HH:mm:ss"));
     usageChart_->setResource(selectedId_); temperatureChart_->setResource(selectedId_);
 }
 void DetailWindow::setPaused(bool paused)
 {
+    processPage_->setPaused(paused);
     const QSignalBlocker blocker(pause_); pause_->setChecked(paused);
     pause_->setText(paused ? QStringLiteral("继续") : QStringLiteral("暂停"));
     status_->setText(paused ? QStringLiteral("Ⅱ  已暂停") : QStringLiteral("●  实时监测"));
 }
 void DetailWindow::setInterval(int milliseconds)
 {
+    processPage_->setInterval(milliseconds);
     const QSignalBlocker blocker(interval_); interval_->setCurrentIndex(interval_->findData(milliseconds));
 }
 void DetailWindow::closeEvent(QCloseEvent *event) { event->accept(); qApp->quit(); }
+void DetailWindow::showEvent(QShowEvent *event) { QWidget::showEvent(event); updateActivePage(); }
+void DetailWindow::hideEvent(QHideEvent *event) { QWidget::hideEvent(event); updateActivePage(); }
+void DetailWindow::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::WindowStateChange) updateActivePage();
+    if (event->type() == QEvent::FontChange || event->type() == QEvent::StyleChange) updateLayout();
+}
+void DetailWindow::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateLayout();
+}
+void DetailWindow::updateLayout()
+{
+    if (!sidebar_ || !performanceLayout_ || !cardsLayout_) return;
+    int sideWidth = width() < 1000 ? 200 : 232;
+    for (auto *tile : tiles_) sideWidth = qMax(sideWidth, tile->minimumSizeHint().width() + 48);
+    sidebar_->setFixedWidth(sideWidth);
+    const int margin = width() < 1000 ? 16 : 30;
+    performanceLayout_->setContentsMargins(margin, 24, margin, 20);
+    const int available = width() - sideWidth - margin * 2 - 20;
+    // Measure a useful card width in the current font instead of assuming a DPI.
+    const int cardWidth = qMax(190, fontMetrics().horizontalAdvance(QStringLiteral("温度 · 最高传感器读数")) + 40);
+    const int columns = available >= cardWidth * 3 + 24 ? 3 : available >= cardWidth * 2 + 12 ? 2 : 1;
+    if (columns != cardColumns_) {
+        for (auto *card : cards_) cardsLayout_->removeWidget(card);
+        for (int column = 0; column < 3; ++column) cardsLayout_->setColumnStretch(column, column < columns ? 1 : 0);
+        for (int i = 0; i < cards_.size(); ++i)
+            cardsLayout_->addWidget(cards_[i], i / columns, i % columns, 1, columns == 2 && i == 2 ? 2 : 1);
+        cardColumns_ = columns;
+    }
+}
 } // namespace monitor::ui

@@ -1,6 +1,13 @@
-# Kylin Monitor · Peony 系统监测插件
+# Kylin Monitor · 任务管理器与 Peony 系统监测插件
 
-C++17 编写的 CPU、GPU、内存监测工具，包含 **Peony 原生桌面插件**与任务管理器风格的详细窗口。使用 **GPL-3.0-or-later** 许可证，硬件采集、数据模型、视图和桌面集成分层，声明与实现分文件。
+C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进程管理页、性能曲线和 Peony 原生桌面插件**。使用 **GPL-3.0-or-later** 许可证，采集、数据模型、视图和桌面集成分层，新增进程功能独立成文件，声明与实现分离。
+
+1.2 版本支持进程搜索、用户过滤、CPU / 内存 / 磁盘读写数值排序、只读详情及确认后结束进程。当前用户进程通过 pidfd 和启动时间校验，采样在后台执行，仅在进程页可见时扫描。使用方法与指标口径见 [任务管理器说明](docs/task-manager.md)。
+
+1.2.1 改善窗口与文字适配：工具栏自动换行，性能卡片随可用宽度重排，长文本可滚动查看，
+进程表格按字体设置默认尺寸并保留手动列宽。验证及截图见 [窗口适配记录](docs/window-layout.md)。
+
+![任务管理器](docs/previews/window-layout/light/processes-1180x780.png)
 
 ![原生浅色模式](docs/previews/native/ukui-light-medium.png)
 ![原生深色模式](docs/previews/native/ukui-dark-medium.png)
@@ -30,7 +37,7 @@ cd openKylin-peeker
 sudo apt-get install build-essential cmake python3 qtbase5-dev qtdeclarative5-dev libqt5svg5-dev
 bash scripts/build.sh
 bash scripts/package.sh
-sudo apt install ./dist/kylin-monitor-1.1.0-linux-amd64.deb
+sudo apt install ./dist/kylin-monitor-1.2.1-linux-amd64.deb
 ```
 
 或者执行 `bash scripts/install.sh`，一次完成编译、测试、打包和安装。运行依赖由安装包声明，包含 Peony、ukui-quick 与 Qt Quick 模块。
@@ -46,6 +53,7 @@ sudo apt install ./dist/kylin-monitor-1.1.0-linux-amd64.deb
 - 桌面配置通常位于 `~/.config/org.ukui/peony-qt-desktop/`。不要为清理一个插件而删除整个桌面配置目录。
 - 管理器预览不读写真实实例配置，也不能执行移除、尺寸切换或打开详情等动作。
 - 详细窗口的模式、位置和刷新间隔通过独立 `QSettings` 保存。
+- 任务管理器的最后页面、表格列布局和排序也保存在 `QSettings`；进程列表、搜索词和命令行不持久化。
 - 不读取用户文件，不上传数据。采样值与最近 60 秒历史仅在内存中；本项目没有便签等用户编辑内容。
 - 卸载保留用户配置；主动移除桌面实例时，由 Peony 清除该实例配置，新建实例使用默认值。
 
@@ -96,6 +104,9 @@ bash scripts/build.sh -DBUILD_PEONY_INTEGRATION_TESTS=ON
 
 SDK 与运行库需匹配。已有对应源码头文件时，可额外指定 `-DUKUI_QUICK_SOURCE_DIR=/path/to/ukui-quick`，该路径仅供测试，不打包第三方源码。测试脚本隔离配置、D-Bus 和显示，不改变用户主题。Ubuntu CI 只证明构建及非宿主测试通过；原生框架和完整桌面验收见 [验证记录](docs/verification.md)。
 
+1.2 任务管理器的测试结果与深浅主题截图见 [任务管理器验证记录](docs/task-manager-verification.md)。
+`bash scripts/capture-task-manager.sh` 可在隔离主题和显示会话中重新获取真实采样截图。
+
 安装本项目 Debian 包、启用上述集成测试构建后，可运行完整桌面验收：
 
 ```bash
@@ -109,9 +120,9 @@ bash scripts/test-desktop.sh
 
 ```text
 src/domain/       公共数据模型
-src/backend/      采集器、温度和文件接口
-src/ui/           详细窗口、历史曲线与备用悬浮窗
-src/app/          独立应用接线、托盘与设置
+src/backend/      资源 / 进程采集、进程控制及后台服务
+src/ui/           进程表格、筛选、详情、性能曲线与悬浮窗
+src/app/          进程控制器、独立应用接线、托盘与设置
 plugin/           metadata.json、main.qml、qmldir
 plugin/src/       C++ QML 数据桥接、共享采样与柱条绘制
 tests/            采集、界面、插件与原生框架测试
@@ -127,7 +138,10 @@ docs/             架构、验收与真实截图
 python3 scripts/prepare-release.py
 ```
 
-生成 `dist/kylin-monitor-1.1.0-source.tar.gz` 与 `SHA256SUMS-1.1.0.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
+生成 `dist/kylin-monitor-1.2.1-source.tar.gz` 与 `SHA256SUMS-1.2.1.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
+
+生成 Debian 包和真实截图后，执行 `python3 scripts/prepare-submission.py` 可得到同版本的 MVP ZIP，
+包含完整源码、安装包、说明、截图和逐文件校验清单；发布脚本会验证 ZIP 可读及内容校验值。
 
 项目仓库：[Gitee · openKylin-peeker](https://gitee.com/kkl-bot/openKylin-peeker)。源码使用 Git 管理，构建产物和安装包放在被忽略的 `dist/` 中，发布时作为发行附件提供。请勿把本机需求、凭据、用户配置或构建目录提交到仓库。
 
@@ -137,6 +151,7 @@ python3 scripts/prepare-release.py
 
 ```bash
 /usr/bin/kylin-monitor --detail
+/usr/bin/kylin-monitor --processes
 /usr/bin/kylin-monitor --mini
 /usr/bin/kylin-monitor --probe
 ```
