@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0 — 2026-11-18
+
+- Add a network page with per-interface download/upload rates and traffic history.
+- Show desktop proxy mode separately from inherited proxy environment variables.
+- Add read-only network details: IPv4/IPv6 addresses, masks/prefixes, gateways and DNS sources.
+- Keep network collection, proxy detection, background service and views in separate modules.
+
 ## 1.2.1 — 2026-11-18
 
 - Reflow controls and performance cards in smaller windows, keeping long text reachable by scrolling.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(KylinMonitor VERSION 1.2.1 LANGUAGES CXX)
+project(KylinMonitor VERSION 1.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,6 +19,7 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets)
 endif()
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS DBus)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Network)
 
 add_library(monitor_backend
     src/domain/metrics.cpp
@@ -43,6 +44,14 @@ add_library(process_backend
 target_include_directories(process_backend PUBLIC src)
 target_link_libraries(process_backend PUBLIC Qt${QT_VERSION_MAJOR}::Core)
 
+add_library(network_backend
+    src/backend/network_collector.cpp
+    src/backend/proxy_reader.cpp
+    src/backend/network_sampling_thread.cpp
+    src/backend/network_service.cpp)
+target_include_directories(network_backend PUBLIC src)
+target_link_libraries(network_backend PUBLIC Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network)
+
 add_library(monitor_ui
     src/ui/theme.cpp
     src/ui/flow_layout.cpp
@@ -57,12 +66,18 @@ add_library(monitor_ui
     src/ui/process_details_dialog.cpp
     src/ui/process_page.cpp
     src/ui/process_presentation.cpp
+    src/ui/network_page.cpp
+    src/ui/network_details_dialog.cpp
+    src/ui/network_history_chart.cpp
+    src/ui/network_presentation.cpp
+    src/ui/network_rate_card.cpp
     src/ui/mini_window.cpp
     src/app/application_controller.cpp
     src/app/snapshot_endpoint.cpp
     src/app/process_controller.cpp
+    src/app/network_controller.cpp
     resources/resources.qrc)
-target_link_libraries(monitor_ui PUBLIC monitor_backend process_backend Qt${QT_VERSION_MAJOR}::Widgets PRIVATE Qt${QT_VERSION_MAJOR}::DBus)
+target_link_libraries(monitor_ui PUBLIC monitor_backend process_backend network_backend Qt${QT_VERSION_MAJOR}::Widgets PRIVATE Qt${QT_VERSION_MAJOR}::DBus)
 
 add_executable(kylin-monitor src/main.cpp)
 target_link_libraries(kylin-monitor PRIVATE monitor_ui)
@@ -75,6 +90,7 @@ else()
     target_compile_options(monitor_backend PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(monitor_ui PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(process_backend PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(network_backend PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 include(CTest)
@@ -82,6 +98,8 @@ if(BUILD_TESTING)
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test)
     add_executable(layout_preview tests/layout_preview.cpp)
     target_link_libraries(layout_preview PRIVATE monitor_ui)
+    add_executable(network_preview tests/network_preview.cpp)
+    target_link_libraries(network_preview PRIVATE monitor_ui)
     add_executable(collector_tests tests/collector_tests.cpp)
     target_link_libraries(collector_tests PRIVATE monitor_backend Qt${QT_VERSION_MAJOR}::Test)
     add_test(NAME collectors COMMAND collector_tests)
@@ -101,6 +119,20 @@ if(BUILD_TESTING)
     target_link_libraries(task_manager_workflow_tests PRIVATE monitor_ui Qt${QT_VERSION_MAJOR}::Test)
     add_test(NAME task_manager_workflow COMMAND task_manager_workflow_tests -platform offscreen)
     set_tests_properties(process_backend process_service process_ui task_manager_workflow PROPERTIES TIMEOUT 45)
+    foreach(test_name network_collector proxy_reader network_service)
+        add_executable(${test_name}_tests tests/${test_name}_tests.cpp)
+        target_link_libraries(${test_name}_tests PRIVATE network_backend Qt${QT_VERSION_MAJOR}::Test)
+        add_test(NAME ${test_name} COMMAND ${test_name}_tests)
+        set_tests_properties(${test_name} PROPERTIES TIMEOUT 45)
+    endforeach()
+    add_executable(network_ui_tests tests/network_ui_tests.cpp)
+    target_link_libraries(network_ui_tests PRIVATE monitor_ui Qt${QT_VERSION_MAJOR}::Test)
+    add_test(NAME network_ui COMMAND network_ui_tests -platform offscreen)
+    set_tests_properties(network_ui PROPERTIES TIMEOUT 45)
+    add_executable(network_workflow_tests tests/network_workflow_tests.cpp)
+    target_link_libraries(network_workflow_tests PRIVATE monitor_ui Qt${QT_VERSION_MAJOR}::Test)
+    add_test(NAME network_workflow COMMAND network_workflow_tests -platform offscreen)
+    set_tests_properties(network_workflow PROPERTIES TIMEOUT 45)
     if(BUILD_PEONY_PLUGIN)
         add_executable(widget_backend_tests tests/widget_backend_tests.cpp)
         target_link_libraries(widget_backend_tests PRIVATE monitor_widget_backend Qt5::Test)
@@ -128,5 +160,5 @@ set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 if(BUILD_PEONY_PLUGIN)
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "peony (>= 4.24), libukui-quick-framework1 (>= 4.25), qml-module-org-ukui-quick-items, qml-module-org-ukui-quick-platform, qml-module-qtquick-controls2, qml-module-qtquick-layouts")
 endif()
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Task manager and CPU, GPU, memory desktop monitor for openKylin")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Task manager with network monitoring and CPU, GPU, memory desktop widget for openKylin")
 include(CPack)

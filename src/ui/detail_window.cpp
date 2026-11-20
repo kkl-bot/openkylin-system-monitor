@@ -2,6 +2,7 @@
 #include "ui/history_chart.h"
 #include "ui/resource_tile.h"
 #include "ui/process_page.h"
+#include "ui/network_page.h"
 #include "ui/flow_layout.h"
 #include <QApplication>
 #include <QCloseEvent>
@@ -64,6 +65,10 @@ DetailWindow::DetailWindow(MonitorModel *model, QWidget *parent) : QWidget(paren
     processNavigation_->setObjectName("processNavigation");
     processNavigation_->setCheckable(true);
     side->addWidget(processNavigation_);
+    networkNavigation_ = new QPushButton(QStringLiteral("网络"));
+    networkNavigation_->setObjectName("networkNavigation");
+    networkNavigation_->setCheckable(true);
+    side->addWidget(networkNavigation_);
     side->addSpacing(12);
     side->addWidget(label(QStringLiteral("资源概览"), "muted"));
     side->addSpacing(8);
@@ -135,11 +140,16 @@ DetailWindow::DetailWindow(MonitorModel *model, QWidget *parent) : QWidget(paren
     pages_->addWidget(performanceScroll_);
     processPage_ = new ProcessPage;
     pages_->addWidget(processPage_);
+    networkPage_ = new NetworkPage;
+    pages_->addWidget(networkPage_);
     root->addWidget(pages_, 1);
     connect(processNavigation_, &QPushButton::clicked, this, &DetailWindow::showProcesses);
+    connect(networkNavigation_, &QPushButton::clicked, this, &DetailWindow::showNetwork);
     connect(pages_, &QStackedWidget::currentChanged, this, &DetailWindow::updateActivePage);
     connect(processPage_, &ProcessPage::pauseRequested, this, &DetailWindow::pauseRequested);
     connect(processPage_, &ProcessPage::intervalRequested, this, &DetailWindow::intervalRequested);
+    connect(networkPage_, &NetworkPage::pauseRequested, this, &DetailWindow::pauseRequested);
+    connect(networkPage_, &NetworkPage::intervalRequested, this, &DetailWindow::intervalRequested);
     connect(model_, &MonitorModel::changed, this, &DetailWindow::refresh);
     connect(mini, &QPushButton::clicked, this, &DetailWindow::miniRequested);
     connect(pause_, &QPushButton::toggled, this, &DetailWindow::pauseRequested);
@@ -164,15 +174,20 @@ void DetailWindow::selectResource(const QString &id) { selectedId_ = id; pages_-
 void DetailWindow::showProcesses() { pages_->setCurrentWidget(processPage_); updateActivePage(); }
 bool DetailWindow::showingProcesses() const { return pages_->currentWidget() == processPage_; }
 ProcessPage *DetailWindow::processPage() const { return processPage_; }
+void DetailWindow::showNetwork() { pages_->setCurrentWidget(networkPage_); updateActivePage(); }
+bool DetailWindow::showingNetwork() const { return pages_->currentWidget() == networkPage_; }
+NetworkPage *DetailWindow::networkPage() const { return networkPage_; }
 void DetailWindow::updateActivePage()
 {
     processNavigation_->setChecked(showingProcesses());
+    networkNavigation_->setChecked(showingNetwork());
     for (auto *tile : tiles_) {
         tile->setAutoExclusive(false);
-        tile->setChecked(!showingProcesses() && tile->resourceId() == selectedId_);
+        tile->setChecked(pages_->currentIndex() == 0 && tile->resourceId() == selectedId_);
         tile->setAutoExclusive(true);
     }
     emit processPageActiveChanged(isVisible() && !isMinimized() && showingProcesses());
+    emit networkPageActiveChanged(isVisible() && !isMinimized() && showingNetwork());
 }
 void DetailWindow::refresh()
 {
@@ -181,7 +196,7 @@ void DetailWindow::refresh()
     if (!sample) return;
     for (auto *tile : tiles_) {
         tile->setAutoExclusive(false);
-        tile->setChecked(!showingProcesses() && tile->resourceId() == selectedId_);
+        tile->setChecked(pages_->currentIndex() == 0 && tile->resourceId() == selectedId_);
         tile->setAutoExclusive(true);
     }
     title_->setText(resourceLabel(sample->kind)); subtitle_->setText(sample->name);
@@ -215,6 +230,7 @@ void DetailWindow::refresh()
 void DetailWindow::setPaused(bool paused)
 {
     processPage_->setPaused(paused);
+    networkPage_->setPaused(paused);
     const QSignalBlocker blocker(pause_); pause_->setChecked(paused);
     pause_->setText(paused ? QStringLiteral("继续") : QStringLiteral("暂停"));
     status_->setText(paused ? QStringLiteral("Ⅱ  已暂停") : QStringLiteral("●  实时监测"));
@@ -222,6 +238,7 @@ void DetailWindow::setPaused(bool paused)
 void DetailWindow::setInterval(int milliseconds)
 {
     processPage_->setInterval(milliseconds);
+    networkPage_->setInterval(milliseconds);
     const QSignalBlocker blocker(interval_); interval_->setCurrentIndex(interval_->findData(milliseconds));
 }
 void DetailWindow::closeEvent(QCloseEvent *event) { event->accept(); qApp->quit(); }

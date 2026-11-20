@@ -1,5 +1,6 @@
 #include "app/application_controller.h"
 #include "ui/process_page.h"
+#include "ui/network_page.h"
 #include <QApplication>
 #include <QDir>
 #include <QIcon>
@@ -22,9 +23,10 @@ void ensureOnScreen(QWidget &window)
 } // namespace
 
 ApplicationController::ApplicationController(QObject *parent)
-    : QObject(parent), endpoint_(model_), detail_(&model_), mini_(&model_), processes_(detail_.processPage())
+    : QObject(parent), endpoint_(model_), detail_(&model_), mini_(&model_), processes_(detail_.processPage()), network_(detail_.networkPage())
 {
     connect(&detail_, &ui::DetailWindow::processPageActiveChanged, &processes_, &ProcessController::setActive);
+    connect(&detail_, &ui::DetailWindow::networkPageActiveChanged, &network_, &NetworkController::setActive);
     connect(&service_, &MonitorService::snapshotReady, &model_, &ui::MonitorModel::acceptSnapshot);
     connect(&detail_, &ui::DetailWindow::miniRequested, this, &ApplicationController::showMini);
     connect(&mini_, &ui::MiniWindow::detailRequested, this, &ApplicationController::showDetail);
@@ -38,7 +40,10 @@ ApplicationController::ApplicationController(QObject *parent)
     connect(shortcut, &QShortcut::activated, this, &ApplicationController::showMini);
     detail_.restoreGeometry(settings_.value("detailGeometry").toByteArray());
     detail_.processPage()->restoreHeaderState(settings_.value("processHeader").toByteArray());
-    if (settings_.value("detailPage", "processes").toString() == "processes") detail_.showProcesses();
+    detail_.networkPage()->setSelectedInterface(settings_.value("networkInterface").toString());
+    const QString page = settings_.value("detailPage", "processes").toString();
+    if (page == "network") detail_.showNetwork();
+    else if (page == "processes") detail_.showProcesses();
     mini_.move(settings_.value("miniPosition", QPoint(80, 80)).toPoint());
     mini_.setAlwaysOnTop(settings_.value("alwaysOnTop", true).toBool());
     ensureOnScreen(detail_); ensureOnScreen(mini_);
@@ -74,21 +79,25 @@ void ApplicationController::showMini()
     miniMode_ = true; mini_.show(); detail_.hide(); mini_.raise();
 }
 void ApplicationController::showProcesses() { detail_.showProcesses(); showDetail(); }
+void ApplicationController::showNetwork() { detail_.showNetwork(); showDetail(); }
 void ApplicationController::setPaused(bool paused)
 {
     endpoint_.setPaused(paused);
     service_.setPaused(paused); processes_.setPaused(paused); detail_.setPaused(paused); mini_.setPaused(paused);
+    network_.setPaused(paused);
 }
 void ApplicationController::setInterval(int milliseconds)
 {
     interval_ = (milliseconds == 500 || milliseconds == 2000 || milliseconds == 5000) ? milliseconds : 1000;
     service_.setInterval(interval_); processes_.setInterval(interval_); detail_.setInterval(interval_); mini_.setInterval(interval_);
+    network_.setInterval(interval_);
 }
 void ApplicationController::saveSettings()
 {
     if (!saveState_) return;
     settings_.setValue("detailGeometry", detail_.saveGeometry());
-    settings_.setValue("detailPage", detail_.showingProcesses() ? "processes" : "performance");
+    settings_.setValue("detailPage", detail_.showingNetwork() ? "network" : detail_.showingProcesses() ? "processes" : "performance");
+    settings_.setValue("networkInterface", detail_.networkPage()->selectedInterface());
     settings_.setValue("processHeader", detail_.processPage()->headerState());
     settings_.setValue("miniPosition", mini_.pos()); settings_.setValue("alwaysOnTop", mini_.alwaysOnTop());
     settings_.setValue("interval", interval_); settings_.setValue("miniMode", miniMode_);
@@ -97,6 +106,8 @@ bool ApplicationController::savePreviews(const QString &directory)
 {
     saveState_ = false;
     if (!QDir().mkpath(directory)) return false;
+    if (detail_.showingNetwork())
+        return detail_.grab().save(QDir(directory).filePath("network.png"));
     bool ok = true;
     detail_.showProcesses(); detail_.show();
     ok = detail_.grab().save(QDir(directory).filePath("processes.png")) && ok;

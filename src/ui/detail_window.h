@@ -17,6 +17,7 @@ namespace monitor::ui {
 class HistoryChart;
 class ResourceTile;
 class ProcessPage;
+class NetworkPage;
 
 class DetailWindow final : public QWidget {
     Q_OBJECT
@@ -28,11 +29,15 @@ public:
     void showProcesses();
     bool showingProcesses() const;
     ProcessPage *processPage() const;
+    void showNetwork();
+    bool showingNetwork() const;
+    NetworkPage *networkPage() const;
 signals:
     void miniRequested();
     void pauseRequested(bool paused);
     void intervalRequested(int milliseconds);
     void processPageActiveChanged(bool active);
+    void networkPageActiveChanged(bool active);
 protected:
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
@@ -67,6 +72,8 @@ private:
     QStackedWidget *pages_;
     ProcessPage *processPage_;
     QPushButton *processNavigation_;
+    NetworkPage *networkPage_;
+    QPushButton *networkNavigation_;
     QFrame *sidebar_ = nullptr;
     QScrollArea *performanceScroll_ = nullptr;
     QVBoxLayout *performanceLayout_ = nullptr;

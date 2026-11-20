@@ -1,6 +1,8 @@
 # Kylin Monitor · 任务管理器与 Peony 系统监测插件
 
-C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进程管理页、性能曲线和 Peony 原生桌面插件**。使用 **GPL-3.0-or-later** 许可证，采集、数据模型、视图和桌面集成分层，新增进程功能独立成文件，声明与实现分离。
+C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进程管理页、网络监控页、性能曲线和 Peony 原生桌面插件**。使用 **GPL-3.0-or-later** 许可证，采集、数据模型、视图和桌面集成分层，进程与网络功能独立成文件，声明与实现分离。
+
+**1.3.0 新增网络监控**：按网卡显示真实收发速度和最近 60 秒曲线，通过详细信息查看 IPv4 / IPv6、子网掩码、默认网关及 DNS 来源，分别展示桌面代理配置与本程序继承的代理环境变量。支持 `--network` 直接打开、网卡选择保存、暂停和手动刷新。使用方法、速率口径和 WSL 范围见 [网络监控说明](docs/network-monitor.md)。
 
 1.2 版本支持进程搜索、用户过滤、CPU / 内存 / 磁盘读写数值排序、只读详情及确认后结束进程。当前用户进程通过 pidfd 和启动时间校验，采样在后台执行，仅在进程页可见时扫描。使用方法与指标口径见 [任务管理器说明](docs/task-manager.md)。
 
@@ -8,6 +10,8 @@ C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进�
 进程表格按字体设置默认尺寸并保留手动列宽。验证及截图见 [窗口适配记录](docs/window-layout.md)。
 
 ![任务管理器](docs/previews/window-layout/light/processes-1180x780.png)
+
+![网络监控](docs/previews/network/light/network-1180x780.png)
 
 ![原生浅色模式](docs/previews/native/ukui-light-medium.png)
 ![原生深色模式](docs/previews/native/ukui-dark-medium.png)
@@ -32,15 +36,17 @@ C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进�
 在 openKylin 内执行：
 
 ```bash
-git clone https://gitee.com/kkl-bot/openKylin-peeker.git
-cd openKylin-peeker
+git clone https://gitee.com/openkylin/openkylin-system-monitor.git
+cd openkylin-system-monitor
 sudo apt-get install build-essential cmake python3 qtbase5-dev qtdeclarative5-dev libqt5svg5-dev
 bash scripts/build.sh
 bash scripts/package.sh
-sudo apt install ./dist/kylin-monitor-1.2.1-linux-amd64.deb
+sudo apt install ./dist/kylin-monitor-1.3.0-linux-amd64.deb
 ```
 
 或者执行 `bash scripts/install.sh`，一次完成编译、测试、打包和安装。运行依赖由安装包声明，包含 Peony、ukui-quick 与 Qt Quick 模块。
+
+使用源码包时，解压 `kylin-monitor-1.3.0-source.tar.gz` 后进入 `kylin-monitor-1.3.0/`，执行相同构建和安装步骤。网络模块使用 Qt Network，开发文件包含在 `qtbase5-dev` 中；`nmcli` 可选，接口 DNS 不可读时使用并标明系统全局解析器配置。
 
 首次安装或升级后，**注销并重新登录 openKylin**，让 Peony 重新发现插件并加载新动态库。桌面空白处右键 → **更多插件** → **系统监测** → 选择尺寸添加，也可以从管理器拖放到桌面。三档预览与真实实例共用同一个 QML 入口。
 
@@ -54,7 +60,8 @@ sudo apt install ./dist/kylin-monitor-1.2.1-linux-amd64.deb
 - 管理器预览不读写真实实例配置，也不能执行移除、尺寸切换或打开详情等动作。
 - 详细窗口的模式、位置和刷新间隔通过独立 `QSettings` 保存。
 - 任务管理器的最后页面、表格列布局和排序也保存在 `QSettings`；进程列表、搜索词和命令行不持久化。
-- 不读取用户文件，不上传数据。采样值与最近 60 秒历史仅在内存中；本项目没有便签等用户编辑内容。
+- 网络页所选网卡名称保存在 `QSettings`，下次启动恢复；网卡暂时消失时保留选择并显示不可用。IP、DNS、流量历史及代理信息不写入应用设置。
+- 不扫描个人文档，不上传监测数据。采样值与最近 60 秒历史仅在内存中；本项目没有便签等用户编辑内容。
 - 卸载保留用户配置；主动移除桌面实例时，由 Peony 清除该实例配置，新建实例使用默认值。
 
 ## 卸载、重载与升级
@@ -80,10 +87,16 @@ sudo apt remove kylin-monitor
 | 内存温度 | `jc42` / `spd5118` / `spd5hub` 传感器 |
 | NVIDIA GPU | 可选 `nvidia-smi`，支持多卡、N/A 和超时 |
 | AMD / 其他 DRM GPU | `gpu_busy_percent`、VRAM 和设备 hwmon |
+| 网卡收发速率 | `/sys/class/net/<接口>/statistics/rx_bytes`、`tx_bytes` 的差值 / 实际采样时间 |
+| IP / 掩码 / 网关 | Qt Network 接口地址，以及 `/proc/net/route`、`/proc/net/ipv6_route` 的默认路由 |
+| DNS | 优先 NetworkManager 的接口信息，回退 `/etc/resolv.conf` 并标注全局 / 存根来源 |
+| 代理配置 | 当前用户的桌面代理模式，以及本程序继承的代理环境变量名称 |
 
 缺失读数明确显示为不可用，不用电池或硬盘温度代替 CPU / 内存温度。Intel GPU 尚未实现专用利用率采集器，仅在驱动提供兼容接口时可读。内存温度需要硬件传感器和驱动。
 
 当前 WSL 实测能读 CPU、内存利用率，未暴露 GPU 监测及 CPU / 内存温度；这些数据反映 WSL 环境，而非 Windows 宿主完整负载。裸机 GPU 的解析路径有夹具测试，仍需对应硬件实机验收。
+
+网络速率首次采样或无法取得连续计数时显示“—”；有效的零增量显示 `0 B/s`。网络页只显示所选网卡，不把虚拟网卡、网桥和物理网卡流量相加。链路已连接不等于互联网可达；代理配置启用也不代表所有应用的流量实际经过代理。WSL 中只观测 Linux 环境可见网卡，不能据此代表 Windows 主机完整流量或代理状态。
 
 ## 测试
 
@@ -102,10 +115,14 @@ sudo apt-get install libukui-quick-dev xvfb xauth dbus-x11 qml-module-qttest
 bash scripts/build.sh -DBUILD_PEONY_INTEGRATION_TESTS=ON
 ```
 
-SDK 与运行库需匹配。已有对应源码头文件时，可额外指定 `-DUKUI_QUICK_SOURCE_DIR=/path/to/ukui-quick`，该路径仅供测试，不打包第三方源码。测试脚本隔离配置、D-Bus 和显示，不改变用户主题。Ubuntu CI 只证明构建及非宿主测试通过；原生框架和完整桌面验收见 [验证记录](docs/verification.md)。
+SDK 与运行库需匹配。已有对应源码头文件时，可额外指定 `-DUKUI_QUICK_SOURCE_DIR=/path/to/ukui-quick`，该路径仅供测试，不打包第三方源码。测试脚本隔离配置、D-Bus 和显示，不改变用户主题。Ubuntu CI 仅覆盖构建及非宿主测试；原生框架和完整桌面验收见 [验证记录](docs/verification.md)。
 
 1.2 任务管理器的测试结果与深浅主题截图见 [任务管理器验证记录](docs/task-manager-verification.md)。
 `bash scripts/capture-task-manager.sh` 可在隔离主题和显示会话中重新获取真实采样截图。
+
+网络模块的用法、定向测试命令和截图入口见 [网络监控说明](docs/network-monitor.md)。
+执行 `bash scripts/capture-network.sh` 可生成网络页及详情截图。
+1.3.0 的测试结果和真实窗口截图见 [网络监控验证记录](docs/network-verification.md)。
 
 安装本项目 Debian 包、启用上述集成测试构建后，可运行完整桌面验收：
 
@@ -120,12 +137,12 @@ bash scripts/test-desktop.sh
 
 ```text
 src/domain/       公共数据模型
-src/backend/      资源 / 进程采集、进程控制及后台服务
-src/ui/           进程表格、筛选、详情、性能曲线与悬浮窗
-src/app/          进程控制器、独立应用接线、托盘与设置
+src/backend/      资源 / 进程 / 网络采集、代理读取、进程控制及后台服务
+src/ui/           进程表格、网络页与网络曲线、详情、性能曲线与悬浮窗
+src/app/          进程 / 网络控制器、独立应用接线、托盘与设置
 plugin/           metadata.json、main.qml、qmldir
 plugin/src/       C++ QML 数据桥接、共享采样与柱条绘制
-tests/            采集、界面、插件与原生框架测试
+tests/            采集、进程 / 网络界面与工作流、插件及原生框架测试
 resources/        原创 SVG 图标
 scripts/          构建、安装、卸载、验证与源码归档
 packaging/        独立应用 desktop 入口
@@ -138,12 +155,12 @@ docs/             架构、验收与真实截图
 python3 scripts/prepare-release.py
 ```
 
-生成 `dist/kylin-monitor-1.2.1-source.tar.gz` 与 `SHA256SUMS-1.2.1.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
+生成 `dist/kylin-monitor-1.3.0-source.tar.gz` 与 `SHA256SUMS-1.3.0.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
 
 生成 Debian 包和真实截图后，执行 `python3 scripts/prepare-submission.py` 可得到同版本的 MVP ZIP，
 包含完整源码、安装包、说明、截图和逐文件校验清单；发布脚本会验证 ZIP 可读及内容校验值。
 
-项目仓库：[Gitee · openKylin-peeker](https://gitee.com/kkl-bot/openKylin-peeker)。源码使用 Git 管理，构建产物和安装包放在被忽略的 `dist/` 中，发布时作为发行附件提供。请勿把本机需求、凭据、用户配置或构建目录提交到仓库。
+项目仓库：[Gitee · openkylin-system-monitor](https://gitee.com/openkylin/openkylin-system-monitor)。源码使用 Git 管理，构建产物和安装包放在被忽略的 `dist/` 中，发布时作为发行附件提供。请勿把本机需求、凭据、用户配置或构建目录提交到仓库。
 
 `.editorconfig` 和 `.gitattributes` 统一 UTF-8、缩进与换行：Linux 源码 / 脚本使用 LF，Windows 启动脚本使用 CRLF。附带的 GitHub Actions 工作流供 GitHub 镜像使用；上传到 Gitee 不会自动执行该工作流。见 [贡献说明](CONTRIBUTING.md)、[变更记录](CHANGELOG.md) 和 [架构说明](docs/architecture.md)。
 
@@ -152,11 +169,13 @@ python3 scripts/prepare-release.py
 ```bash
 /usr/bin/kylin-monitor --detail
 /usr/bin/kylin-monitor --processes
+/usr/bin/kylin-monitor --network
 /usr/bin/kylin-monitor --mini
 /usr/bin/kylin-monitor --probe
 ```
 
-`--mini` 保留原先的独立置顶悬浮窗。`--probe` 输出两次真实采样后的 JSON，缺失为 `null` 并附原因。
+`--network` 直接进入独立任务管理器的网络页。`--mini` 保留原先的独立置顶悬浮窗。
+`--probe` 输出两次 CPU / GPU / 内存真实采样后的 JSON，缺失为 `null` 并附原因；该选项不输出网络或进程清单。
 
 ## 许可与参考
 

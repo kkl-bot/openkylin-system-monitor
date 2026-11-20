@@ -4,6 +4,7 @@
 #include "ui/detail_window.h"
 #include "ui/mini_window.h"
 #include "app/process_controller.h"
+#include "app/network_controller.h"
 #include "app/snapshot_endpoint.h"
 #include <QObject>
 #include <QSettings>
@@ -19,6 +20,7 @@ public:
     void showDetail();
     void showMini();
     void showProcesses();
+    void showNetwork();
     bool savePreviews(const QString &directory);
 private:
     void setPaused(bool paused);
@@ -31,6 +33,7 @@ private:
     ui::DetailWindow detail_;
     ui::MiniWindow mini_;
     ProcessController processes_;
+    NetworkController network_;
     QSystemTrayIcon *tray_ = nullptr;
     int interval_ = 1000;
     bool miniMode_ = false;

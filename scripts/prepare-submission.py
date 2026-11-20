@@ -35,10 +35,13 @@ for theme in ("light", "dark"):
     if adaptive.exists():
         screenshot = adaptive
     files[f"screenshots/task-manager-{theme}.png"] = screenshot.read_bytes()
+    for name in ("network-1180x780", "network-760x500", "network-details"):
+        screenshot = ROOT / f"docs/previews/network/{theme}/{name}.png"
+        files[f"screenshots/{name}-{theme}.png"] = screenshot.read_bytes()
 
 files["提交说明.md"] = f"""# Kylin Monitor {VERSION} · 任务管理器 MVP
 
-源码与完整 README 位于 source/；Debian 安装包位于 packages/；真实进程界面截图位于 screenshots/。
+源码与完整 README 位于 source/；Debian 安装包位于 packages/；真实进程和网络界面截图位于 screenshots/。
 source/docs/previews/ 保留完整的性能窗口和 Peony 插件历史验收截图。
 
 在 openKylin 3.0 amd64 内执行：
@@ -46,14 +49,16 @@ source/docs/previews/ 保留完整的性能窗口和 Peony 插件历史验收截
 ```bash
 sudo apt install ./packages/{DEB.name}
 /usr/bin/kylin-monitor --processes
+/usr/bin/kylin-monitor --network
 ```
 
 进程页支持搜索、按 CPU / 内存 / 磁盘读写排序、详情查看及确认后结束当前普通用户进程。
+网络页显示按网卡采集的上传、下载速度和代理配置状态；“详细信息”包含 IP、网关、DNS 和子网掩码。
 左侧 CPU、GPU、内存打开性能曲线；Ctrl+M 切换备用柱状图悬浮窗。
 安装或升级后注销并重新登录，可在桌面“更多插件”中添加原生 Peony 小插件。
 卸载命令：sudo apt remove kylin-monitor。用户配置会保留。
 
-测试记录：source/docs/task-manager-verification.md、source/docs/window-layout.md；使用说明：source/docs/task-manager.md。
+使用及验证说明：source/docs/network-monitor.md、source/docs/network-verification.md、source/docs/task-manager.md。
 本版本在 openKylin WSL 中验证；监测范围为 Linux 环境，不能管理 Windows 宿主进程。
 WSL 未提供的温度或 GPU 指标显示不可用。开源许可证为 GPL-3.0-or-later，详见 source/LICENSE。
 

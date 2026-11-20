@@ -36,6 +36,28 @@ ProcessPage ← ProcessFilterModel ← ProcessTableModel ← ProcessSnapshot
 丢弃旧请求的结果；暂停时允许一次手动刷新。窗口退出前唤醒并等待后台线程结束。
 进程扫描与原有性能采样独立，详细指标口径和操作保护见 [任务管理器说明](task-manager.md)。
 
+## 网络监控分支（1.3）
+
+```text
+QNetworkInterface + sysfs + procfs + nmcli → NetworkCollector
+当前用户桌面代理模式 + 环境变量名 → ProxyReader
+                     ↓
+NetworkSamplingThread → NetworkService → NetworkController → NetworkPage
+                                                            ↓
+                                    NetworkHistoryChart / NetworkDetailsDialog
+```
+
+网络后端使用独立的 `network_backend` 库，只依赖 Qt Core / Network，不依赖 Widgets。
+视图消费 `NetworkSnapshot`，格式化、速度卡片、历史曲线和详情窗口各有独立声明与实现文件。
+网络页可见时才采样；暂停、隐藏和最小化后停止轮询，恢复后重建速率基线并丢弃旧请求。
+网卡身份用接口索引和名称校验；字节差除以实际单调时间，不把缺失或回退计数当成零速率。
+
+DNS 和路由信息缓存 5 秒，接口拓扑变化或手动刷新会使缓存失效。代理查询也缓存 5 秒，
+只读取桌面代理模式和本进程继承的环境变量名称，不读取、记录或显示代理认证信息。
+命令查询在后台有界等待，不阻塞 GUI，不发起外部测速连接或执行 PAC。
+网卡选择与最后页面复用应用的 `QSettings`；运行历史及地址信息不写入用户配置。
+具体指标口径与 WSL 范围见 [网络监控说明](network-monitor.md)。
+
 ## Peony 原生插件分支（1.1）
 
 ```text
