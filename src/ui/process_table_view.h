@@ -16,6 +16,7 @@ protected:
     bool event(QEvent *event) override;
     void changeEvent(QEvent *event) override;
     bool viewportEvent(QEvent *event) override;
+    bool eventFilter(QObject *object, QEvent *event) override;
 private:
     void scheduleMetricsUpdate();
     void updateMetrics();

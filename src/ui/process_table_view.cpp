@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScopedValueRollback>
 #include <QStyle>
 #include <QStringList>
 #include <QTimer>
@@ -24,6 +25,8 @@ ProcessTableView::ProcessTableView(QWidget *parent) : QTableView(parent)
     horizontalHeader()->setStretchLastSection(false);
     verticalHeader()->hide();
     setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    horizontalHeader()->installEventFilter(this);
     connect(horizontalHeader(), &QHeaderView::sectionResized, this, [this](int column, int, int) {
         if (!updatingMetrics_) { manualColumns_.insert(column); scheduleMetricsUpdate(); }
     });
@@ -80,9 +83,21 @@ bool ProcessTableView::event(QEvent *event)
 }
 void ProcessTableView::changeEvent(QEvent *event)
 {
-    QTableView::changeEvent(event);
-    if (event->type() == QEvent::FontChange || event->type() == QEvent::ApplicationFontChange || event->type() == QEvent::StyleChange)
+    if (event->type() == QEvent::FontChange || event->type() == QEvent::ApplicationFontChange || event->type() == QEvent::StyleChange) {
+        {
+            // Style/font handling is automatic, not a user resize of a column.
+            const QScopedValueRollback<bool> guard(updatingMetrics_, true);
+            QTableView::changeEvent(event);
+        }
         scheduleMetricsUpdate();
+    } else QTableView::changeEvent(event);
+}
+bool ProcessTableView::eventFilter(QObject *object, QEvent *event)
+{
+    if (object == horizontalHeader() && (event->type() == QEvent::FontChange
+        || event->type() == QEvent::ApplicationFontChange || event->type() == QEvent::StyleChange))
+        scheduleMetricsUpdate();
+    return QTableView::eventFilter(object, event);
 }
 bool ProcessTableView::viewportEvent(QEvent *event)
 {
@@ -102,7 +117,7 @@ void ProcessTableView::updateMetrics()
     updatingMetrics_ = true;
     ensurePolished();
     horizontalHeader()->ensurePolished();
-    const QFontMetrics text(font()), heading(horizontalHeader()->font());
+    const QFontMetrics text(font(), this), heading(horizontalHeader()->font(), horizontalHeader());
     const int padding = qMax(12, text.height() / 2);
     const int headerMargin = qMax(4, style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, horizontalHeader()));
     const int rowHeight = text.height() + padding;

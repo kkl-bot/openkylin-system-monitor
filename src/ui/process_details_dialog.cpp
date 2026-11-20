@@ -1,5 +1,6 @@
 #include "ui/process_details_dialog.h"
 #include "ui/process_presentation.h"
+#include "ui/typography.h"
 #include "domain/metrics.h"
 #include <QDialogButtonBox>
 #include <QLabel>
@@ -28,6 +29,7 @@ ProcessDetailsDialog::ProcessDetailsDialog(const ProcessInfo &process, const QDa
     details->setReadOnly(true);
     details->setLineWrapMode(QPlainTextEdit::WidgetWidth);
     details->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    details->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     details->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     const auto value = [](const QString &text) { return text.isEmpty() ? QStringLiteral("不可用") : text; };
     const QStringList lines = {
@@ -44,6 +46,7 @@ ProcessDetailsDialog::ProcessDetailsDialog(const ProcessInfo &process, const QDa
     layout->addWidget(details, 1);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject); layout->addWidget(buttons);
+    enableWindowTypography(this);
 }
 void ProcessDetailsDialog::showEvent(QShowEvent *event)
 {

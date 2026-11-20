@@ -75,6 +75,7 @@ private:
     NetworkPage *networkPage_;
     QPushButton *networkNavigation_;
     QFrame *sidebar_ = nullptr;
+    QLabel *brand_ = nullptr;
     QScrollArea *performanceScroll_ = nullptr;
     QVBoxLayout *performanceLayout_ = nullptr;
     QGridLayout *cardsLayout_ = nullptr;

@@ -5,6 +5,7 @@
 #include "ui/process_table_view.h"
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialogButtonBox>
 #include <QHeaderView>
 #include <QLabel>
 #include <QGuiApplication>
@@ -19,6 +20,7 @@
 #include <QTableView>
 #include <QTimer>
 #include <QTextDocument>
+#include <QTextCursor>
 #include <QtTest>
 #include <algorithm>
 
@@ -70,6 +72,7 @@ private slots:
     void rejectsReusedPidDuringConfirmation();
     void detailsAndErrorsArePlainText();
     void tableAdaptsToFontAndPreservesManualWidths();
+    void tableInheritsPixelFontsAndKeepsScrollAccess();
     void narrowPageKeepsControlsReachable();
     void detailsFitScreenAndWrapLongCommands();
 };
@@ -149,9 +152,11 @@ void ProcessUiTests::controlsAndHeaderState()
 void ProcessUiTests::confirmationDefaultsToCancelAndKeepsOriginalTarget()
 {
     ProcessPage page; filter(page)->setCurrentUserId(1000); auto sample = snapshot(); page.acceptSnapshot(sample); selectPid(page, 902001);
+    auto largeFont = page.font(); largeFont.setPointSize(20); page.setFont(largeFont);
     QSignalSpy terminated(&page, &ProcessPage::terminateRequested);
     QTimer::singleShot(0, &page, [&page]() {
         auto *confirmation = page.findChild<QMessageBox *>(); QVERIFY(confirmation);
+        QCOMPARE(confirmation->font().pointSizeF(), page.font().pointSizeF());
         QCOMPARE(confirmation->textFormat(), Qt::PlainText);
         QCOMPARE(confirmation->standardButton(confirmation->defaultButton()), QMessageBox::Cancel);
         confirmation->button(QMessageBox::Cancel)->click();
@@ -202,6 +207,7 @@ void ProcessUiTests::tableAdaptsToFontAndPreservesManualWidths()
 {
     ProcessPage page; page.resize(920, 720); page.acceptSnapshot(snapshot()); page.show();
     auto *view = table(page); QTest::qWait(20);
+    const QFont originalFont = page.font();
     const int oldRowHeight = view->rowHeight(0), oldHeaderHeight = view->horizontalHeader()->height();
     const int oldCpuWidth = view->columnWidth(ProcessTableModel::Cpu);
     view->setColumnWidth(ProcessTableModel::Name, 241);
@@ -215,6 +221,13 @@ void ProcessUiTests::tableAdaptsToFontAndPreservesManualWidths()
     QTRY_VERIFY(view->horizontalScrollBar()->maximum() > 0);
     QCOMPARE(view->columnWidth(ProcessTableModel::Name), 241);
     QVERIFY(view->columnWidth(ProcessTableModel::Cpu) >= view->fontMetrics().horizontalAdvance(QStringLiteral("100.0 %")) + 8);
+    const int enlargedRowHeight = view->rowHeight(0), enlargedHeaderHeight = view->horizontalHeader()->height();
+    const int enlargedCpuWidth = view->columnWidth(ProcessTableModel::Cpu);
+    page.setFont(originalFont);
+    QTRY_VERIFY(view->rowHeight(0) < enlargedRowHeight);
+    QTRY_VERIFY(view->horizontalHeader()->height() < enlargedHeaderHeight);
+    QTRY_VERIFY(view->columnWidth(ProcessTableModel::Cpu) < enlargedCpuWidth);
+    QCOMPARE(view->columnWidth(ProcessTableModel::Name), 241);
     const QByteArray saved = page.headerState();
     ProcessPage restored; restored.restoreHeaderState(saved); restored.acceptSnapshot(snapshot());
     restored.resize(520, 520); restored.show();
@@ -226,15 +239,48 @@ void ProcessUiTests::tableAdaptsToFontAndPreservesManualWidths()
     ProcessPage legacy; legacy.restoreHeaderState(view->horizontalHeader()->saveState());
     QCOMPARE(table(legacy)->columnWidth(ProcessTableModel::Name), 241);
 }
+void ProcessUiTests::tableInheritsPixelFontsAndKeepsScrollAccess()
+{
+    ProcessPage page;
+    auto sample = snapshot();
+    for (int i = 0; i < 100; ++i)
+        sample.processes.append(process(903000 + i, QStringLiteral("worker-%1").arg(i), 0, 4096));
+    page.resize(520, 500); page.acceptSnapshot(sample); page.show();
+    auto *view = table(page);
+    view->setColumnWidth(ProcessTableModel::Name, 210);
+    auto font = page.font(); font.setPixelSize(32); page.setFont(font);
+    QTRY_COMPARE(view->font().pixelSize(), 32);
+    QTRY_VERIFY(view->rowHeight(0) >= view->fontMetrics().height());
+    QTRY_VERIFY(view->horizontalScrollBar()->maximum() > 0);
+    QTRY_VERIFY(view->verticalScrollBar()->maximum() > 0);
+    const int largeHeight = view->rowHeight(0);
+    const auto last = view->model()->index(view->model()->rowCount() - 1, ProcessTableModel::WriteRate);
+    view->setCurrentIndex(last); view->scrollTo(last, QAbstractItemView::PositionAtBottom);
+    QTRY_VERIFY(view->visualRect(last).intersects(view->viewport()->rect()));
+    font.setPixelSize(16); page.setFont(font);
+    QTRY_COMPARE(view->font().pixelSize(), 16);
+    QTRY_VERIFY(view->rowHeight(0) < largeHeight);
+    QCOMPARE(view->columnWidth(ProcessTableModel::Name), 210);
+    QCOMPARE(view->currentIndex(), last);
+    view->scrollTo(last, QAbstractItemView::PositionAtBottom);
+    QTRY_VERIFY(view->visualRect(last).intersects(view->viewport()->rect()));
+}
 void ProcessUiTests::narrowPageKeepsControlsReachable()
 {
     ProcessPage page; auto font = page.font(); font.setPointSize(20); page.setFont(font);
     page.resize(520, 500); page.acceptSnapshot(snapshot()); page.show(); QTest::qWait(20);
     auto *scroll = page.findChild<QScrollArea *>(QStringLiteral("processContentScroll")); QVERIFY(scroll);
     QCOMPARE(page.width(), 520);
+    auto *search = page.findChild<QLineEdit *>(QStringLiteral("processSearch"));
+    auto *own = page.findChild<QCheckBox *>(QStringLiteral("processOwnOnly"));
+    QVERIFY(search); QVERIFY(own);
+    QCOMPARE(search->font().pointSizeF(), page.font().pointSizeF());
+    QCOMPARE(own->font().pointSizeF(), page.font().pointSizeF());
+    QTRY_VERIFY(own->mapTo(scroll->widget(), QPoint()).y()
+                >= search->mapTo(scroll->widget(), QPoint()).y() + search->height());
     const QList<QWidget *> controls = {button(page, "processRefresh"), button(page, "processDetails"),
         button(page, "processTerminate"), button(page, "processForceTerminate"), button(page, "processPause"),
-        page.findChild<QComboBox *>(QStringLiteral("processInterval"))};
+        page.findChild<QComboBox *>(QStringLiteral("processInterval")), search, own};
     for (int i = 0; i < controls.size(); ++i) {
         auto *control = controls[i]; QVERIFY(control);
         QVERIFY2(control->width() >= control->minimumSizeHint().width(), qPrintable(control->objectName()));
@@ -247,19 +293,34 @@ void ProcessUiTests::narrowPageKeepsControlsReachable()
     }
     scroll->ensureWidgetVisible(button(page, "processPause"));
     QTRY_VERIFY(scroll->viewport()->rect().contains(button(page, "processPause")->mapTo(scroll->viewport(), button(page, "processPause")->rect().center())));
+    page.resize(1600, 720);
+    QTRY_VERIFY(qAbs(search->mapTo(scroll->widget(), search->rect().center()).y()
+                    - own->mapTo(scroll->widget(), own->rect().center()).y()) <= search->height() / 2);
 }
 void ProcessUiTests::detailsFitScreenAndWrapLongCommands()
 {
     auto sample = snapshot(); sample.processes[0].commandLine = QString(4000, QLatin1Char('X'));
-    ProcessDetailsDialog dialog(sample.processes[0], sample.timestamp);
+    QWidget parent;
+    auto font = parent.font(); font.setPointSize(20); parent.setFont(font);
+    ProcessDetailsDialog dialog(sample.processes[0], sample.timestamp, &parent);
     const QRect available = QGuiApplication::primaryScreen()->availableGeometry();
     dialog.resize(available.size() + QSize(500, 300)); dialog.show(); QTest::qWait(20);
     QVERIFY(dialog.width() <= available.width()); QVERIFY(dialog.height() <= available.height());
     auto *text = dialog.findChild<QPlainTextEdit *>(); QVERIFY(text);
+    QVERIFY(dialog.font().pointSizeF() >= parent.font().pointSizeF());
+    QCOMPARE(text->font().pointSizeF(), dialog.font().pointSizeF());
     QCOMPARE(text->lineWrapMode(), QPlainTextEdit::WidgetWidth);
     QCOMPARE(text->wordWrapMode(), QTextOption::WrapAtWordBoundaryOrAnywhere);
     QVERIFY(text->toPlainText().contains(sample.processes[0].commandLine));
     QCOMPARE(text->horizontalScrollBar()->maximum(), 0);
+    QVERIFY(text->verticalScrollBar()->maximum() > 0);
+    auto cursor = text->textCursor(); cursor.movePosition(QTextCursor::End);
+    text->setTextCursor(cursor); text->ensureCursorVisible();
+    QTRY_VERIFY(text->viewport()->rect().intersects(text->cursorRect()));
+    auto *buttons = dialog.findChild<QDialogButtonBox *>(); QVERIFY(buttons);
+    auto *close = buttons->button(QDialogButtonBox::Close); QVERIFY(close);
+    QCOMPARE(close->font().pointSizeF(), dialog.font().pointSizeF());
+    QVERIFY(dialog.rect().contains(QRect(close->mapTo(&dialog, QPoint()), close->size())));
 }
 QTEST_MAIN(ProcessUiTests)
 #include "process_ui_tests.moc"

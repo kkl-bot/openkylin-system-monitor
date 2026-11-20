@@ -29,16 +29,8 @@ void applyTheme(QApplication &application)
         QWidget#detailWindow { background: palette(window); }
         QFrame#sidebar { background: palette(alternate-base); border-right: 1px solid palette(mid); }
         QWidget#resourceHost { background: palette(alternate-base); }
-        QLabel#brand { font-size: 20px; font-weight: 700; }
-        QLabel#eyebrow { color: palette(placeholder-text); font-size: 10px; letter-spacing: 2px; }
-        QLabel#pageTitle { font-size: 28px; font-weight: 600; }
-        QLabel#subtitle, QLabel#muted { color: palette(placeholder-text); }
-        QLabel#cardLabel { color: palette(placeholder-text); font-size: 11px; }
-        QLabel#cardValue { font-size: 29px; font-weight: 500; }
         QFrame#metricCard { background: palette(alternate-base); border: 1px solid palette(mid); border-radius: 10px; }
-        QLabel#sectionTitle { font-size: 12px; font-weight: 600; }
-        QLabel#notice { color: palette(placeholder-text); font-size: 11px; }
-        QLabel#live { color: palette(highlighted-text); background: palette(highlight); border-radius: 10px; padding: 5px 10px; font-size: 11px; }
+        QLabel#live { color: palette(highlighted-text); background: palette(highlight); border-radius: 10px; padding: 5px 10px; }
         QPushButton { border: 1px solid palette(mid); border-radius: 6px; padding: 7px 13px; background: palette(button); }
         QPushButton:hover { background: palette(alternate-base); }
         QPushButton:checked { background: palette(highlight); color: palette(highlighted-text); }

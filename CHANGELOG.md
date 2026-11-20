@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1 — 2026-11-20
+
+- Apply one typography hierarchy to page titles, metrics, body text, captions, charts and read-only dialogs.
+- Derive the window's body font from the system font and available window size; avoid repeated or independent font multipliers.
+- Recalculate process tables, network rate cards and chart layouts after font changes while keeping controls reachable in compact windows.
+- Capture current light/dark layouts in `docs/previews/typography/` and include the large-font CPU view in the submission archive, preserving historical screenshots.
+
 ## 1.3.0 — 2026-11-18
 
 - Add a network page with per-interface download/upload rates and traffic history.

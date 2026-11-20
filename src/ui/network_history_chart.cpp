@@ -7,6 +7,7 @@
 #include <QPainterPath>
 #include <QSet>
 #include <QTextOption>
+#include <QVariant>
 #include <cmath>
 
 namespace monitor::ui {
@@ -19,6 +20,7 @@ std::optional<double> validRate(const std::optional<double> &value)
 NetworkHistoryChart::NetworkHistoryChart(QWidget *parent) : QWidget(parent)
 {
     setObjectName(QStringLiteral("networkHistoryChart"));
+    setProperty("textRole", "caption");
     setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
 }
 void NetworkHistoryChart::acceptSnapshot(const NetworkSnapshot &snapshot)
@@ -82,10 +84,7 @@ void NetworkHistoryChart::changeEvent(QEvent *event)
 void NetworkHistoryChart::paintEvent(QPaintEvent *)
 {
     QPainter painter(this); painter.setRenderHint(QPainter::Antialiasing);
-    QFont axisFont = font();
-    if (axisFont.pointSizeF() > 0) axisFont.setPointSizeF(axisFont.pointSizeF() * 0.85);
-    else if (axisFont.pixelSize() > 0) axisFont.setPixelSize(qMax(1, qRound(axisFont.pixelSize() * 0.85)));
-    painter.setFont(axisFont); const QFontMetrics metrics(axisFont);
+    painter.setFont(font()); const QFontMetrics metrics(font());
     const int gap = qMax(5, metrics.height() / 3), height = metrics.height();
     const double maximum = axisMaximum();
     QStringList ticks; int axisWidth = 0;

@@ -7,6 +7,8 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QEvent>
+#include <QFontMetrics>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QItemSelectionModel>
@@ -16,7 +18,9 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QStyle>
 #include <QTableView>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace monitor::ui {
@@ -25,6 +29,7 @@ QLabel *plainLabel(const QString &text, const QString &objectName, QWidget *pare
 {
     auto *label = new QLabel(text, parent); label->setTextFormat(Qt::PlainText);
     label->setObjectName(objectName); label->setWordWrap(true);
+    if (objectName == QStringLiteral("pageTitle")) label->setProperty("textRole", QStringLiteral("title"));
     if (flexibleWidth) label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     return label;
 }
@@ -36,17 +41,18 @@ ProcessPage::ProcessPage(QWidget *parent) : QWidget(parent)
     auto *scroll = new QScrollArea(this); scroll->setObjectName(QStringLiteral("processContentScroll"));
     scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    auto *content = new QWidget; scroll->setWidget(content); outer->addWidget(scroll);
-    auto *root = new QVBoxLayout(content); root->setContentsMargins(24, 22, 24, 18); root->setSpacing(10);
+    content_ = new QWidget; scroll->setWidget(content_); outer->addWidget(scroll);
+    auto *root = new QVBoxLayout(content_); root->setContentsMargins(24, 22, 24, 18); root->setSpacing(10);
     root->setSizeConstraint(QLayout::SetMinAndMaxSize);
     root->addWidget(plainLabel(QStringLiteral("进程"), QStringLiteral("pageTitle"), this));
     root->addWidget(plainLabel(QStringLiteral("CPU 按整机总容量计量 · 内存为驻留内存 · 点击列标题排序"), QStringLiteral("subtitle"), this));
-    auto *searchRow = new QHBoxLayout;
-    auto *search = new QLineEdit(this); search->setObjectName(QStringLiteral("processSearch"));
-    search->setPlaceholderText(QStringLiteral("搜索名称、PID 或用户")); search->setClearButtonEnabled(true);
-    search->setAccessibleName(QStringLiteral("搜索进程")); searchRow->addWidget(search, 1);
-    auto *own = new QCheckBox(QStringLiteral("仅我的进程"), this); own->setObjectName(QStringLiteral("processOwnOnly"));
-    searchRow->addWidget(own); root->addLayout(searchRow);
+    searchLayout_ = new QHBoxLayout;
+    search_ = new QLineEdit(this); search_->setObjectName(QStringLiteral("processSearch"));
+    search_->setPlaceholderText(QStringLiteral("搜索名称、PID 或用户")); search_->setClearButtonEnabled(true);
+    search_->setToolTip(search_->placeholderText());
+    search_->setAccessibleName(QStringLiteral("搜索进程")); searchLayout_->addWidget(search_, 1);
+    ownOnly_ = new QCheckBox(QStringLiteral("仅我的进程"), this); ownOnly_->setObjectName(QStringLiteral("processOwnOnly"));
+    searchLayout_->addWidget(ownOnly_, 0, Qt::AlignLeft); root->addLayout(searchLayout_);
     auto *actions = new FlowLayout;
     auto *refresh = new QPushButton(QStringLiteral("刷新"), this); refresh->setObjectName(QStringLiteral("processRefresh"));
     details_ = new QPushButton(QStringLiteral("详情"), this); details_->setObjectName(QStringLiteral("processDetails"));
@@ -76,10 +82,10 @@ ProcessPage::ProcessPage(QWidget *parent) : QWidget(parent)
     pause_ = new QPushButton(QStringLiteral("暂停"), this); pause_->setObjectName(QStringLiteral("processPause")); pause_->setCheckable(true);
     bottom->addWidget(pause_); root->addLayout(bottom);
 
-    connect(search, &QLineEdit::textChanged, filter_, &ProcessFilterModel::setSearchText);
-    connect(own, &QCheckBox::toggled, filter_, &ProcessFilterModel::setOwnProcessesOnly);
-    connect(search, &QLineEdit::textChanged, this, [this]() { refreshSelection(); refreshStatus(); });
-    connect(own, &QCheckBox::toggled, this, [this]() { refreshSelection(); refreshStatus(); });
+    connect(search_, &QLineEdit::textChanged, filter_, &ProcessFilterModel::setSearchText);
+    connect(ownOnly_, &QCheckBox::toggled, filter_, &ProcessFilterModel::setOwnProcessesOnly);
+    connect(search_, &QLineEdit::textChanged, this, [this]() { refreshSelection(); refreshStatus(); });
+    connect(ownOnly_, &QCheckBox::toggled, this, [this]() { refreshSelection(); refreshStatus(); });
     connect(table_->selectionModel(), &QItemSelectionModel::selectionChanged, this, &ProcessPage::refreshSelection);
     connect(table_, &QTableView::doubleClicked, this, [this]() { openDetails(); });
     connect(details_, &QPushButton::clicked, this, &ProcessPage::openDetails);
@@ -88,7 +94,43 @@ ProcessPage::ProcessPage(QWidget *parent) : QWidget(parent)
     connect(refresh, &QPushButton::clicked, this, &ProcessPage::refreshRequested);
     connect(pause_, &QPushButton::toggled, this, [this](bool paused) { setPaused(paused); emit pauseRequested(paused); });
     connect(interval_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() { emit intervalRequested(interval_->currentData().toInt()); });
+    content_->installEventFilter(this);
+    scheduleSearchLayoutUpdate();
     refreshSelection(); refreshStatus();
+}
+bool ProcessPage::eventFilter(QObject *object, QEvent *event)
+{
+    if (object == content_ && event->type() == QEvent::Resize) scheduleSearchLayoutUpdate();
+    return QWidget::eventFilter(object, event);
+}
+void ProcessPage::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::FontChange || event->type() == QEvent::ApplicationFontChange
+        || event->type() == QEvent::StyleChange) scheduleSearchLayoutUpdate();
+}
+void ProcessPage::scheduleSearchLayoutUpdate()
+{
+    if (searchLayoutUpdatePending_) return;
+    searchLayoutUpdatePending_ = true;
+    QTimer::singleShot(0, this, [this]() { searchLayoutUpdatePending_ = false; updateSearchLayout(); });
+}
+void ProcessPage::updateSearchLayout()
+{
+    const int available = searchLayout_->geometry().width();
+    if (available <= 0) return;
+    const QFontMetrics metrics(search_->font(), search_);
+    const int spacing = qMax(8, metrics.height() / 3);
+    const int searchWidth = metrics.horizontalAdvance(search_->placeholderText())
+        + metrics.horizontalAdvance(QLatin1Char('M')) * 2
+        + search_->style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, search_)
+        + search_->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, search_) * 2;
+    // Keep the search readable at the inherited font size; move the filter to
+    // the next row rather than squeezing both controls into the same row.
+    const bool stack = available < searchWidth + spacing + ownOnly_->sizeHint().width();
+    const auto direction = stack ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
+    if (searchLayout_->direction() != direction) searchLayout_->setDirection(direction);
+    if (searchLayout_->spacing() != spacing) searchLayout_->setSpacing(spacing);
 }
 void ProcessPage::acceptSnapshot(const ProcessSnapshot &snapshot)
 {
@@ -165,6 +207,7 @@ void ProcessPage::confirmTermination(bool force)
     QMessageBox confirmation(force ? QMessageBox::Warning : QMessageBox::Question,
         force ? QStringLiteral("强制结束进程") : QStringLiteral("结束进程"), {}, QMessageBox::Cancel, this);
     confirmation.setObjectName(QStringLiteral("processTerminationConfirmation"));
+    confirmation.setFont(font());
     confirmation.setTextFormat(Qt::PlainText);
     confirmation.setText(QStringLiteral("%1\nPID：%2\n用户：%3（UID %4）")
         .arg(target->name, QString::number(target->identity.pid), target->user, QString::number(target->identity.uid)));

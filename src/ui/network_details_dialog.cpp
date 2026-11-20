@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ui/network_details_dialog.h"
 #include "ui/network_presentation.h"
+#include "ui/typography.h"
 #include "domain/metrics.h"
 #include <QDialogButtonBox>
 #include <QGuiApplication>
@@ -10,6 +11,7 @@
 #include <QShowEvent>
 #include <QTextOption>
 #include <QVBoxLayout>
+#include <QVariant>
 #include <QWindow>
 
 namespace monitor::ui {
@@ -20,6 +22,7 @@ NetworkDetailsDialog::NetworkDetailsDialog(const NetworkInterfaceInfo &interface
     resize(qMax(640, fontMetrics().horizontalAdvance(QLatin1Char('M')) * 64), qMax(480, fontMetrics().height() * 24));
     auto *layout = new QVBoxLayout(this);
     auto *notice = new QLabel(QStringLiteral("显示打开时的网卡快照；DNS 来源和代理配置不代表所有应用的实际行为。"), this);
+    notice->setObjectName(QStringLiteral("networkDetailsNotice")); notice->setProperty("textRole", "caption");
     notice->setTextFormat(Qt::PlainText); notice->setWordWrap(true);
     notice->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); layout->addWidget(notice);
     auto *text = new QPlainTextEdit(this); text->setObjectName(QStringLiteral("networkDetailsText"));
@@ -57,6 +60,7 @@ NetworkDetailsDialog::NetworkDetailsDialog(const NetworkInterfaceInfo &interface
     text->setPlainText(lines.join(QLatin1Char('\n'))); layout->addWidget(text, 1);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this); layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    enableWindowTypography(this);
 }
 void NetworkDetailsDialog::showEvent(QShowEvent *event)
 {

@@ -4,6 +4,7 @@
 #include "ui/process_page.h"
 #include "ui/network_page.h"
 #include "ui/flow_layout.h"
+#include "ui/typography.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -26,6 +27,9 @@ QLabel *label(const QString &text, const QString &name, QWidget *parent = nullpt
 {
     auto *result = new QLabel(text, parent);
     result->setObjectName(name);
+    if (name == "brand" || name == "pageTitle") result->setProperty("textRole", "title");
+    else if (name == "cardValue") result->setProperty("textRole", "metric");
+    else if (name == "sectionTitle") result->setProperty("textRole", "section");
     result->setTextFormat(Qt::PlainText);
     result->setWordWrap(true);
     return result;
@@ -58,8 +62,8 @@ DetailWindow::DetailWindow(MonitorModel *model, QWidget *parent) : QWidget(paren
     auto *sidebar = new QFrame; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(232);
     sidebar_ = sidebar;
     auto *side = new QVBoxLayout(sidebar); side->setContentsMargins(16, 30, 16, 24); side->setSpacing(8);
-    side->addWidget(label(QStringLiteral("任务管理器"), "brand"));
-    side->addWidget(label("KYLIN  /  MONITOR", "eyebrow"));
+    brand_ = label(QStringLiteral("任务管理器"), "brand");
+    side->addWidget(brand_);
     side->addSpacing(20);
     processNavigation_ = new QPushButton(QStringLiteral("进程"));
     processNavigation_->setObjectName("processNavigation");
@@ -84,7 +88,6 @@ DetailWindow::DetailWindow(MonitorModel *model, QWidget *parent) : QWidget(paren
     side->addWidget(scroll, 1);
     environment_ = label("openKylin · Linux", "muted"); environment_->setWordWrap(true);
     resourceContent->addWidget(environment_);
-    resourceContent->addWidget(label(QStringLiteral("让系统状态，一目了然。"), "eyebrow"));
     root->addWidget(sidebar);
 
     pages_ = new QStackedWidget;
@@ -154,6 +157,7 @@ DetailWindow::DetailWindow(MonitorModel *model, QWidget *parent) : QWidget(paren
     connect(mini, &QPushButton::clicked, this, &DetailWindow::miniRequested);
     connect(pause_, &QPushButton::toggled, this, &DetailWindow::pauseRequested);
     connect(interval_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { emit intervalRequested(interval_->currentData().toInt()); });
+    enableWindowTypography(this);
     refresh();
     updateLayout();
 }
@@ -166,6 +170,8 @@ void DetailWindow::rebuildResources()
     for (const auto &id : ids) {
         auto *tile = new ResourceTile(model_, id); tiles_.append(tile);
         resourcesLayout_->insertWidget(resourcesLayout_->count() - 1, tile);
+        // UKUI can assign its own button font when a new device appears after the window is shown.
+        tile->setFont(font());
         connect(tile, &QPushButton::clicked, this, [this, id]() { selectResource(id); });
     }
     updateLayout();
@@ -210,7 +216,6 @@ void DetailWindow::refresh()
         capacityLabel_->setText(sample->kind == ResourceKind::Gpu ? QStringLiteral("显存占用 / 总量") : QStringLiteral("已用 / 总内存"));
         capacity_->setText(sample->usedBytes && sample->totalBytes ? formatBytes(*sample->usedBytes) + " / " + formatBytes(*sample->totalBytes) : QStringLiteral("—"));
     }
-    capacity_->setStyleSheet(sample->kind == ResourceKind::Cpu ? "font-size: 29px;" : "font-size: 16px;");
     QStringList notes;
     if (!sample->utilization.value) notes.append(sample->utilization.reason);
     if (!sample->temperature.value && !notes.contains(sample->temperature.reason)) notes.append(sample->temperature.reason);
@@ -259,7 +264,12 @@ void DetailWindow::updateLayout()
 {
     if (!sidebar_ || !performanceLayout_ || !cardsLayout_) return;
     int sideWidth = width() < 1000 ? 200 : 232;
-    for (auto *tile : tiles_) sideWidth = qMax(sideWidth, tile->minimumSizeHint().width() + 48);
+    const int preferredLimit = width() / 3;
+    sideWidth = qMax(sideWidth, qMin(preferredLimit, brand_->fontMetrics().horizontalAdvance(brand_->text()) + 36));
+    for (auto *tile : tiles_) {
+        sideWidth = qMax(sideWidth, tile->minimumSizeHint().width() + 48);
+        sideWidth = qMax(sideWidth, qMin(preferredLimit, tile->sizeHint().width() + 48));
+    }
     sidebar_->setFixedWidth(sideWidth);
     const int margin = width() < 1000 ? 16 : 30;
     performanceLayout_->setContentsMargins(margin, 24, margin, 20);

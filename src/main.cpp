@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     Q_INIT_RESOURCE(resources);
     QApplication::setOrganizationName("KylinMonitor"); QApplication::setApplicationName("kylin-monitor");
-    QApplication::setApplicationVersion("1.3.0"); QApplication::setQuitOnLastWindowClosed(false);
+    QApplication::setApplicationVersion("1.3.1"); QApplication::setQuitOnLastWindowClosed(false);
     QApplication::setWindowIcon(QIcon(":/kylin-monitor.svg"));
     monitor::ui::applyTheme(app);
     QCommandLineParser parser;

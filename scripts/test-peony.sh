@@ -9,7 +9,10 @@ cleanup() {
         /tmp/kylin-monitor-test.*)
             for portal in doc gvfs; do
                 if mountpoint -q "$TEST_ROOT/runtime/$portal"; then
-                    fusermount -uz "$TEST_ROOT/runtime/$portal"
+                    # The isolated D-Bus session may unmount its portal between these two calls.
+                    if ! fusermount -uz "$TEST_ROOT/runtime/$portal" && mountpoint -q "$TEST_ROOT/runtime/$portal"; then
+                        return 1
+                    fi
                 fi
             done
             rm -rf -- "$TEST_ROOT"

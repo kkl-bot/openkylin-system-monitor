@@ -3,6 +3,7 @@
 #include "ui/network_history_chart.h"
 #include "ui/network_page.h"
 #include "ui/network_presentation.h"
+#include "ui/typography.h"
 #include <QComboBox>
 #include <QAbstractItemView>
 #include <QLabel>
@@ -52,6 +53,7 @@ private slots:
     void detailsDistinguishMissingRoutesFromReadErrors();
     void historyRetainsGapsAcrossUnknownAndPause();
     void narrowPageKeepsControlsReachable();
+    void typographyUsesOneBaselineWithoutCompounding();
 };
 void NetworkUiTests::choosesDefaultRouteBeforeOtherInterfaces()
 {
@@ -83,6 +85,7 @@ void NetworkUiTests::restoresSelectionAndKeepsMissingInterfaceExplicit()
 void NetworkUiTests::distinguishesUnavailableFromZero()
 {
     NetworkPage page; page.setSelectedInterface(QStringLiteral("eth0")); auto sample = snapshot(); page.acceptSnapshot(sample);
+    applyTypography(&page);
     QCOMPARE(label(page, "networkDownload")->text(), QStringLiteral("—")); QCOMPARE(label(page, "networkUpload")->text(), QStringLiteral("—"));
     auto *downloadCard = label(page, "networkDownload")->parentWidget(); const int initialCardWidth = downloadCard->minimumWidth();
     QVERIFY(initialCardWidth >= 180);
@@ -92,7 +95,7 @@ void NetworkUiTests::distinguishesUnavailableFromZero()
     QCOMPARE(label(page, "networkDownload")->text(), QStringLiteral("0 B/s"));
     QCOMPARE(label(page, "networkUpload")->text(), QStringLiteral("1.0 MiB/s"));
     QCOMPARE(downloadCard->minimumWidth(), initialCardWidth);
-    auto larger = page.font(); larger.setPointSize(20); page.setFont(larger);
+    auto larger = page.font(); larger.setPointSize(20); page.setFont(larger); applyTypography(&page);
     QVERIFY(downloadCard->minimumWidth() > initialCardWidth);
     QCOMPARE(networkRateLabel(std::numeric_limits<double>::infinity()), QStringLiteral("—"));
     QCOMPARE(networkRateLabel(-1), QStringLiteral("—"));
@@ -170,6 +173,10 @@ void NetworkUiTests::detailsShowEveryAddressAndSourceAsPlainText()
     auto *narrowText = narrow.findChild<QPlainTextEdit *>(QStringLiteral("networkDetailsText"));
     QVERIFY(narrowText->toPlainText().contains(sample.proxy.detail));
     QCOMPARE(narrowText->horizontalScrollBar()->maximum(), 0);
+    QCOMPARE(narrowText->font().pointSizeF(), narrow.font().pointSizeF());
+    auto *detailsNotice = narrow.findChild<QLabel *>(QStringLiteral("networkDetailsNotice")); QVERIFY(detailsNotice);
+    QCOMPARE(detailsNotice->property("textRole").toString(), QStringLiteral("caption"));
+    QVERIFY(detailsNotice->font().pointSizeF() <= narrowText->font().pointSizeF());
 }
 void NetworkUiTests::historyRetainsGapsAcrossUnknownAndPause()
 {
@@ -210,7 +217,7 @@ void NetworkUiTests::detailsDistinguishMissingRoutesFromReadErrors()
 void NetworkUiTests::narrowPageKeepsControlsReachable()
 {
     NetworkPage page; auto font = page.font(); font.setPointSize(20); page.setFont(font);
-    page.resize(520, 500); page.acceptSnapshot(snapshot()); page.show(); QTest::qWait(20);
+    page.resize(520, 500); page.acceptSnapshot(snapshot()); applyTypography(&page); page.show(); QTest::qWait(20);
     auto *scroll = page.findChild<QScrollArea *>(QStringLiteral("networkContentScroll")); QVERIFY(scroll); QCOMPARE(page.width(), 520);
     const int chartTop = page.findChild<NetworkHistoryChart *>()->mapTo(scroll->widget(), QPoint()).y();
     QVERIFY(label(page, "networkSystemProxy")->mapTo(scroll->widget(), QPoint()).y() < chartTop);
@@ -225,6 +232,35 @@ void NetworkUiTests::narrowPageKeepsControlsReachable()
         scroll->ensureWidgetVisible(control);
         QTRY_VERIFY(scroll->viewport()->rect().contains(control->mapTo(scroll->viewport(), control->rect().center())));
     }
+}
+void NetworkUiTests::typographyUsesOneBaselineWithoutCompounding()
+{
+    NetworkPage page; QFont baseline = page.font(); baseline.setPointSizeF(14); page.setFont(baseline);
+    page.acceptSnapshot(snapshot()); applyTypography(&page);
+    auto *metric = label(page, "networkDownload");
+    auto *caption = page.findChild<QLabel *>(QStringLiteral("cardLabel"));
+    auto *title = page.findChild<QLabel *>(QStringLiteral("pageTitle"));
+    auto *chart = page.findChild<NetworkHistoryChart *>();
+    QVERIFY(metric); QVERIFY(caption); QVERIFY(title); QVERIFY(chart);
+    QCOMPARE(metric->property("textRole").toString(), QStringLiteral("metric"));
+    QCOMPARE(caption->property("textRole").toString(), QStringLiteral("caption"));
+    QCOMPARE(chart->property("textRole").toString(), QStringLiteral("caption"));
+    QCOMPARE(title->property("textRole").toString(), QStringLiteral("title"));
+    QCOMPARE(chart->font().pointSizeF(), caption->font().pointSizeF());
+    QVERIFY(metric->font().pointSizeF() > page.font().pointSizeF());
+    QVERIFY(title->font().pointSizeF() > page.font().pointSizeF());
+    QCOMPARE(label(page, "networkSystemProxy")->font().pointSizeF(), page.font().pointSizeF());
+    const auto initialMetric = metric->font(); const int initialWidth = metric->parentWidget()->minimumWidth();
+    const auto initialChart = chart->font(); const auto initialChartSize = chart->minimumSizeHint();
+    applyTypography(&page); applyTypography(&page);
+    QCOMPARE(metric->font(), initialMetric); QCOMPARE(chart->font(), initialChart);
+    QCOMPARE(metric->parentWidget()->minimumWidth(), initialWidth);
+    baseline.setPointSizeF(20); page.setFont(baseline); applyTypography(&page);
+    QVERIFY(metric->font().pointSizeF() > initialMetric.pointSizeF());
+    QVERIFY(chart->font().pointSizeF() > initialChart.pointSizeF());
+    QVERIFY(chart->minimumSizeHint().height() > initialChartSize.height());
+    QVERIFY(metric->parentWidget()->minimumWidth() > initialWidth);
+    QVERIFY(metric->parentWidget()->minimumWidth() >= metric->fontMetrics().horizontalAdvance(QStringLiteral("999.9 MiB/s")) + 32);
 }
 QTEST_MAIN(NetworkUiTests)
 #include "network_ui_tests.moc"

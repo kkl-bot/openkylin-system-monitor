@@ -1,5 +1,6 @@
 #include "ui/resource_tile.h"
 #include "ui/theme.h"
+#include "ui/typography.h"
 #include <QEvent>
 #include <QFontMetrics>
 #include <QPainter>
@@ -7,14 +8,6 @@
 
 namespace monitor::ui {
 namespace {
-QFont scaledFont(const QFont &base, qreal scale)
-{
-    QFont result = base;
-    if (base.pointSizeF() > 0) result.setPointSizeF(base.pointSizeF() * scale);
-    else if (base.pixelSize() > 0) result.setPixelSize(qMax(1, qRound(base.pixelSize() * scale)));
-    return result;
-}
-
 struct TileLayout {
     QFont titleFont;
     QFont detailFont;
@@ -33,10 +26,9 @@ TileLayout measureTile(const QFont &font, const QPaintDevice *device, int width,
                        const ResourceSample *sample)
 {
     TileLayout layout;
-    layout.titleFont = scaledFont(font, 1.05);
-    layout.titleFont.setBold(true);
-    layout.detailFont = scaledFont(font, 0.9);
-    layout.valueFont = scaledFont(font, 1.2);
+    layout.titleFont = typographyFont(font, TextRole::Section);
+    layout.detailFont = typographyFont(font, TextRole::Body);
+    layout.valueFont = typographyFont(font, TextRole::Metric);
     const QFontMetrics baseMetrics(font, device);
     const QFontMetrics titleMetrics(layout.titleFont, device);
     const QFontMetrics detailMetrics(layout.detailFont, device);

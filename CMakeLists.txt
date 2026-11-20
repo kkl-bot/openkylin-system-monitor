@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(KylinMonitor VERSION 1.3.0 LANGUAGES CXX)
+project(KylinMonitor VERSION 1.3.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -54,6 +54,7 @@ target_link_libraries(network_backend PUBLIC Qt${QT_VERSION_MAJOR}::Core Qt${QT_
 
 add_library(monitor_ui
     src/ui/theme.cpp
+    src/ui/typography.cpp
     src/ui/flow_layout.cpp
     src/ui/theme_watcher.cpp
     src/ui/monitor_model.cpp

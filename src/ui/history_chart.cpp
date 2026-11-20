@@ -1,5 +1,6 @@
 #include "ui/history_chart.h"
 #include "ui/theme.h"
+#include "ui/typography.h"
 #include <QEvent>
 #include <QFontMetrics>
 #include <QPainter>
@@ -21,14 +22,16 @@ struct ChartLayout {
     int bottom = 0;
     int right = 0;
     int minimumPlotWidth = 0;
+    int startTimeWidth = 0;
+    int endTimeWidth = 0;
 };
 
 ChartLayout measureChart(const QFont &font, const QPaintDevice *device, double maximum, bool temperature)
 {
     ChartLayout layout;
-    layout.axisFont = font;
-    if (font.pointSizeF() > 0) layout.axisFont.setPointSizeF(font.pointSizeF() * 0.85);
-    else if (font.pixelSize() > 0) layout.axisFont.setPixelSize(qMax(1, qRound(font.pixelSize() * 0.85)));
+    // Axis annotations use the widget's body size. Reserve measured space for
+    // them instead of reducing text to make the plot larger.
+    layout.axisFont = typographyFont(font, TextRole::Body);
     const QFontMetrics metrics(layout.axisFont, device);
     layout.labelHeight = metrics.height();
     layout.gap = qMax(4, metrics.height() / 4);
@@ -41,8 +44,10 @@ ChartLayout measureChart(const QFont &font, const QPaintDevice *device, double m
     layout.top = (layout.labelHeight + 1) / 2 + layout.padding;
     layout.bottom = layout.gap + layout.labelHeight + layout.padding;
     layout.right = layout.gap + layout.labelWidth + layout.padding;
+    layout.startTimeWidth = metrics.horizontalAdvance(QStringLiteral("60 秒前")) + 2;
+    layout.endTimeWidth = metrics.horizontalAdvance(QStringLiteral("现在")) + 2;
     layout.minimumPlotWidth = qMax(metrics.horizontalAdvance('0') * 8,
-        metrics.horizontalAdvance(QStringLiteral("60 秒前")) + metrics.horizontalAdvance(QStringLiteral("现在")) + layout.gap);
+        layout.startTimeWidth + layout.endTimeWidth + layout.gap);
     return layout;
 }
 
@@ -62,6 +67,8 @@ HistoryChart::HistoryChart(MonitorModel *model, bool temperature, QWidget *paren
     : QWidget(parent), model_(model), temperature_(temperature)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setAccessibleName(temperature ? QStringLiteral("温度历史曲线") : QStringLiteral("利用率历史曲线"));
+    setAccessibleDescription(QStringLiteral("横轴从左到右为最近 60 秒，右侧显示数值刻度。"));
     connect(model_, &MonitorModel::changed, this, [this]() { updateGeometry(); update(); });
 }
 void HistoryChart::setResource(const QString &id)
@@ -146,13 +153,16 @@ void HistoryChart::paintEvent(QPaintEvent *)
         }
     }
     painter.setPen(palette().color(QPalette::PlaceholderText));
-    const int timeWidth = qMax(0, int((plot.width() - layout.gap) / 2));
-    painter.drawText(QRectF(plot.left(), plot.bottom() + layout.gap, timeWidth, layout.labelHeight),
+    // The two labels have different widths; equal half-width slots can elide
+    // "60 秒前" even when the combined text fits comfortably in the plot.
+    const int endTimeWidth = qMin(layout.endTimeWidth, qMax(0, int(plot.width())));
+    const int startTimeWidth = qMin(layout.startTimeWidth, qMax(0, int(plot.width()) - endTimeWidth - layout.gap));
+    painter.drawText(QRectF(plot.left(), plot.bottom() + layout.gap, startTimeWidth, layout.labelHeight),
                      Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
-                     painter.fontMetrics().elidedText(QStringLiteral("60 秒前"), Qt::ElideRight, timeWidth));
-    painter.drawText(QRectF(plot.right() - timeWidth, plot.bottom() + layout.gap, timeWidth, layout.labelHeight),
+                     painter.fontMetrics().elidedText(QStringLiteral("60 秒前"), Qt::ElideRight, startTimeWidth));
+    painter.drawText(QRectF(plot.right() - endTimeWidth, plot.bottom() + layout.gap, endTimeWidth, layout.labelHeight),
                      Qt::AlignRight | Qt::AlignVCenter | Qt::TextSingleLine,
-                     painter.fontMetrics().elidedText(QStringLiteral("现在"), Qt::ElideLeft, timeWidth));
+                     painter.fontMetrics().elidedText(QStringLiteral("现在"), Qt::ElideLeft, endTimeWidth));
     painter.save();
     painter.setClipRect(plot.adjusted(-1, -1, 1, 1));
     QVector<QPointF> segment;

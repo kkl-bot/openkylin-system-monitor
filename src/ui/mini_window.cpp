@@ -1,5 +1,6 @@
 #include "ui/mini_window.h"
 #include "ui/theme.h"
+#include "ui/typography.h"
 #include <QActionGroup>
 #include <QContextMenuEvent>
 #include <QGuiApplication>
@@ -8,6 +9,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QScreen>
+#include <QTextDocument>
 
 namespace monitor::ui {
 namespace {
@@ -79,7 +81,7 @@ void MiniWindow::refreshTooltip()
     }
     lines.append(QStringLiteral("斜纹 = 无可用读数；拖动移动，双击详情，右键设置"));
     if (paused_) lines.append(QStringLiteral("采样已暂停，显示最后一次读数"));
-    setToolTip(lines.join('\n'));
+    setToolTip(Qt::convertFromPlainText(lines.join('\n')));
 }
 void MiniWindow::setPaused(bool paused) { paused_ = paused; refreshTooltip(); update(); }
 void MiniWindow::setInterval(int milliseconds) { interval_ = milliseconds; }
@@ -122,11 +124,14 @@ void MiniWindow::keyPressEvent(QKeyEvent *event)
 void MiniWindow::contextMenuEvent(QContextMenuEvent *event)
 {
     QMenu menu(this);
+    const QFont menuFont = typographyFont(font(), TextRole::Body);
+    menu.setFont(menuFont);
     menu.addAction(QStringLiteral("打开详细模式"), this, &MiniWindow::detailRequested);
     menu.addAction(paused_ ? QStringLiteral("继续采样") : QStringLiteral("暂停采样"), this, [this]() { emit pauseRequested(!paused_); });
     auto *top = menu.addAction(QStringLiteral("保持置顶")); top->setCheckable(true); top->setChecked(alwaysOnTop_);
     connect(top, &QAction::toggled, this, &MiniWindow::setAlwaysOnTop);
     auto *refresh = menu.addMenu(QStringLiteral("刷新间隔"));
+    refresh->setFont(menuFont);
     auto *intervalGroup = new QActionGroup(&menu);
     for (const int milliseconds : {500, 1000, 2000, 5000}) {
         auto *action = refresh->addAction(QString::number(milliseconds / 1000.0) + QStringLiteral(" 秒"));
@@ -137,6 +142,7 @@ void MiniWindow::contextMenuEvent(QContextMenuEvent *event)
     for (const auto &sample : model_->snapshot().resources) if (sample.kind == ResourceKind::Gpu) gpus.append(&sample);
     if (gpus.size() > 1) {
         auto *devices = menu.addMenu(QStringLiteral("悬浮窗显示的 GPU"));
+        devices->setFont(menuFont);
         auto *group = new QActionGroup(&menu);
         const auto *displayed = displayedResources()[1];
         for (const auto *gpu : gpus) {

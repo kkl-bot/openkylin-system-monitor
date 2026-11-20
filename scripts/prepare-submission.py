@@ -15,6 +15,21 @@ DIST = ROOT / "dist"
 DEB = DIST / f"kylin-monitor-{VERSION}-linux-amd64.deb"
 if not DEB.is_file():
     raise FileNotFoundError("Build the matching Debian package with scripts/package.sh first")
+SCREENSHOT_NAMES = {
+    "processes-1180x780": "task-manager",
+    "network-1180x780": "network-1180x780",
+    "network-760x500": "network-760x500",
+    "network-details": "network-details",
+    "cpu-760x500-font150": "cpu-760x500-font150",
+}
+screenshots = {
+    f"screenshots/{destination}-{theme}.png": ROOT / f"docs/previews/typography/{theme}/{source}.png"
+    for theme in ("light", "dark")
+    for source, destination in SCREENSHOT_NAMES.items()
+}
+missing = [str(path.relative_to(ROOT)) for path in screenshots.values() if not path.is_file()]
+if missing:
+    raise FileNotFoundError("Generate current typography screenshots before packaging: " + ", ".join(missing))
 runpy.run_path(str(ROOT / "scripts/prepare-release.py"), run_name="__main__")
 
 prefix = f"kylin-monitor-{VERSION}-MVP/"
@@ -29,19 +44,12 @@ with tarfile.open(DIST / f"kylin-monitor-{VERSION}-source.tar.gz") as archive:
         files[name] = archive.extractfile(member).read()
         modes[name] = member.mode
 files[f"packages/{DEB.name}"] = DEB.read_bytes()
-for theme in ("light", "dark"):
-    screenshot = ROOT / f"docs/previews/task-manager/{theme}/processes.png"
-    adaptive = ROOT / f"docs/previews/window-layout/{theme}/processes-1180x780.png"
-    if adaptive.exists():
-        screenshot = adaptive
-    files[f"screenshots/task-manager-{theme}.png"] = screenshot.read_bytes()
-    for name in ("network-1180x780", "network-760x500", "network-details"):
-        screenshot = ROOT / f"docs/previews/network/{theme}/{name}.png"
-        files[f"screenshots/{name}-{theme}.png"] = screenshot.read_bytes()
+for name, screenshot in screenshots.items():
+    files[name] = screenshot.read_bytes()
 
 files["提交说明.md"] = f"""# Kylin Monitor {VERSION} · 任务管理器 MVP
 
-源码与完整 README 位于 source/；Debian 安装包位于 packages/；真实进程和网络界面截图位于 screenshots/。
+源码与完整 README 位于 source/；Debian 安装包位于 packages/；当前进程、网络和大字体性能界面截图位于 screenshots/。
 source/docs/previews/ 保留完整的性能窗口和 Peony 插件历史验收截图。
 
 在 openKylin 3.0 amd64 内执行：
@@ -59,7 +67,8 @@ sudo apt install ./packages/{DEB.name}
 卸载命令：sudo apt remove kylin-monitor。用户配置会保留。
 
 使用及验证说明：source/docs/network-monitor.md、source/docs/network-verification.md、source/docs/task-manager.md。
-本版本在 openKylin WSL 中验证；监测范围为 Linux 环境，不能管理 Windows 宿主进程。
+运行目标为 openKylin 3.0 amd64；监测范围为 Linux 环境，不能管理 Windows 宿主进程。
+历史功能验证记录以文档注明的版本、环境和范围为准；当前字号适配截图来自 source/docs/previews/typography/。
 WSL 未提供的温度或 GPU 指标显示不可用。开源许可证为 GPL-3.0-or-later，详见 source/LICENSE。
 
 MANIFEST.json 提供每个归档文件的 SHA-256；外部 SHA256SUMS-{VERSION}.txt 用于校验 ZIP 和其他发布文件。

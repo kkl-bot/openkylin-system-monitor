@@ -2,16 +2,18 @@
 
 C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进程管理页、网络监控页、性能曲线和 Peony 原生桌面插件**。使用 **GPL-3.0-or-later** 许可证，采集、数据模型、视图和桌面集成分层，进程与网络功能独立成文件，声明与实现分离。
 
-**1.3.0 新增网络监控**：按网卡显示真实收发速度和最近 60 秒曲线，通过详细信息查看 IPv4 / IPv6、子网掩码、默认网关及 DNS 来源，分别展示桌面代理配置与本程序继承的代理环境变量。支持 `--network` 直接打开、网卡选择保存、暂停和手动刷新。使用方法、速率口径和 WSL 范围见 [网络监控说明](docs/network-monitor.md)。
+**1.3.1 改善字号与阅读层级**：详细窗口根据系统字体和窗口尺寸调整正文基线，标题、指标、说明与图表使用统一字体层级。进程表格、网速卡片和曲线按实际字体重新测量，窄窗口通过换行和滚动保留全部操作；详情窗口也使用相同的字体规则。
+
+1.3.0 新增网络监控：按网卡显示真实收发速度和最近 60 秒曲线，通过详细信息查看 IPv4 / IPv6、子网掩码、默认网关及 DNS 来源，分别展示桌面代理配置与本程序继承的代理环境变量。支持 `--network` 直接打开、网卡选择保存、暂停和手动刷新。使用方法、速率口径和 WSL 范围见 [网络监控说明](docs/network-monitor.md)。
 
 1.2 版本支持进程搜索、用户过滤、CPU / 内存 / 磁盘读写数值排序、只读详情及确认后结束进程。当前用户进程通过 pidfd 和启动时间校验，采样在后台执行，仅在进程页可见时扫描。使用方法与指标口径见 [任务管理器说明](docs/task-manager.md)。
 
 1.2.1 改善窗口与文字适配：工具栏自动换行，性能卡片随可用宽度重排，长文本可滚动查看，
 进程表格按字体设置默认尺寸并保留手动列宽。验证及截图见 [窗口适配记录](docs/window-layout.md)。
 
-![任务管理器](docs/previews/window-layout/light/processes-1180x780.png)
+![任务管理器](docs/previews/typography/light/processes-1180x780.png)
 
-![网络监控](docs/previews/network/light/network-1180x780.png)
+![网络监控](docs/previews/typography/light/network-1180x780.png)
 
 ![原生浅色模式](docs/previews/native/ukui-light-medium.png)
 ![原生深色模式](docs/previews/native/ukui-dark-medium.png)
@@ -41,12 +43,12 @@ cd openkylin-system-monitor
 sudo apt-get install build-essential cmake python3 qtbase5-dev qtdeclarative5-dev libqt5svg5-dev
 bash scripts/build.sh
 bash scripts/package.sh
-sudo apt install ./dist/kylin-monitor-1.3.0-linux-amd64.deb
+sudo apt install ./dist/kylin-monitor-1.3.1-linux-amd64.deb
 ```
 
 或者执行 `bash scripts/install.sh`，一次完成编译、测试、打包和安装。运行依赖由安装包声明，包含 Peony、ukui-quick 与 Qt Quick 模块。
 
-使用源码包时，解压 `kylin-monitor-1.3.0-source.tar.gz` 后进入 `kylin-monitor-1.3.0/`，执行相同构建和安装步骤。网络模块使用 Qt Network，开发文件包含在 `qtbase5-dev` 中；`nmcli` 可选，接口 DNS 不可读时使用并标明系统全局解析器配置。
+使用源码包时，解压 `kylin-monitor-1.3.1-source.tar.gz` 后进入 `kylin-monitor-1.3.1/`，执行相同构建和安装步骤。网络模块使用 Qt Network，开发文件包含在 `qtbase5-dev` 中；`nmcli` 可选，接口 DNS 不可读时使用并标明系统全局解析器配置。
 
 首次安装或升级后，**注销并重新登录 openKylin**，让 Peony 重新发现插件并加载新动态库。桌面空白处右键 → **更多插件** → **系统监测** → 选择尺寸添加，也可以从管理器拖放到桌面。三档预览与真实实例共用同一个 QML 入口。
 
@@ -122,7 +124,17 @@ SDK 与运行库需匹配。已有对应源码头文件时，可额外指定 `-D
 
 网络模块的用法、定向测试命令和截图入口见 [网络监控说明](docs/network-monitor.md)。
 执行 `bash scripts/capture-network.sh` 可生成网络页及详情截图。
-1.3.0 的测试结果和真实窗口截图见 [网络监控验证记录](docs/network-verification.md)。
+1.3.0 的历史测试结果和窗口截图见 [网络监控验证记录](docs/network-verification.md)。
+
+当前字号适配截图统一输出到 `docs/previews/typography/`，保留之前版本的截图目录。在完成构建后执行：
+
+```bash
+bash scripts/capture-layout.sh
+bash scripts/capture-network.sh ./build-openkylin/network_preview ./docs/previews/typography
+```
+
+两条命令分别生成性能 / 进程和网络页 / 详情的深浅主题截图。窗口适配截图包含 760 × 500 下的 150% 字体场景。
+`capture-layout.sh` 可接收一个输出根目录参数，例如 `bash scripts/capture-layout.sh /tmp/kylin-monitor-previews`。
 
 安装本项目 Debian 包、启用上述集成测试构建后，可运行完整桌面验收：
 
@@ -155,10 +167,11 @@ docs/             架构、验收与真实截图
 python3 scripts/prepare-release.py
 ```
 
-生成 `dist/kylin-monitor-1.3.0-source.tar.gz` 与 `SHA256SUMS-1.3.0.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
+生成 `dist/kylin-monitor-1.3.1-source.tar.gz` 与 `SHA256SUMS-1.3.1.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
 
 生成 Debian 包和真实截图后，执行 `python3 scripts/prepare-submission.py` 可得到同版本的 MVP ZIP，
 包含完整源码、安装包、说明、截图和逐文件校验清单；发布脚本会验证 ZIP 可读及内容校验值。
+提交包的独立截图取自 `docs/previews/typography/{light,dark}/`，包括进程页、两档网络窗口、网络详情和大字体 CPU 页面；缺少当前截图时停止打包，不以历史截图替代。
 
 项目仓库：[Gitee · openkylin-system-monitor](https://gitee.com/openkylin/openkylin-system-monitor)。源码使用 Git 管理，构建产物和安装包放在被忽略的 `dist/` 中，发布时作为发行附件提供。请勿把本机需求、凭据、用户配置或构建目录提交到仓库。
 

@@ -11,7 +11,6 @@
 #include <QFontMetrics>
 #include <QIcon>
 #include <QPixmap>
-#include <QPointer>
 #include <QTableView>
 #include <QTextStream>
 #include <QTimer>
@@ -24,11 +23,6 @@ struct CaptureStep {
     QSize requestedSize;
     bool processes = false;
     bool largeFont = false;
-};
-
-struct WidgetFont {
-    QPointer<QWidget> widget;
-    QFont normalFont;
 };
 
 QString captureName(const CaptureStep &step)
@@ -90,21 +84,13 @@ int main(int argc, char *argv[])
     window.show();
 
     const QFont normalFont = QApplication::font();
-    const QFont largeFont = enlargedFont(normalFont);
+    QFont largeFont;
     auto *processTable = window.findChild<QTableView *>(QStringLiteral("processTable"));
     if (!processTable) {
         QTextStream(stderr) << "Process table was not found.\n";
         return 4;
     }
-    QVector<WidgetFont> widgetFonts;
     int normalTableFontHeight = 0;
-    bool usingWidgetFontOverride = false;
-    const auto applyWidgetFonts = [&](bool enlarged) {
-        for (const auto &entry : widgetFonts) {
-            if (entry.widget)
-                entry.widget->setFont(enlarged ? enlargedFont(entry.normalFont) : entry.normalFont);
-        }
-    };
     const QVector<CaptureStep> steps{
         {{760, 500}, true, false}, {{760, 500}, false, false},
         {{1024, 720}, true, false}, {{1024, 720}, false, false},
@@ -113,20 +99,15 @@ int main(int argc, char *argv[])
     };
     int stepIndex = 0;
     std::function<void()> captureNext;
-    std::function<void(CaptureStep, bool)> saveStep;
-    saveStep = [&](CaptureStep step, bool triedWidgetOverride) {
+    const auto saveStep = [&](CaptureStep step) {
         const int tableFontHeight = processTable->fontMetrics().height();
+        if (!step.largeFont && step.processes && step.requestedSize == QSize(760, 500)) {
+            normalTableFontHeight = tableFontHeight;
+            largeFont = enlargedFont(processTable->font());
+        }
         const bool fontEnlarged = tableFontHeight >= qMax(normalTableFontHeight + 1,
                                                        qRound(normalTableFontHeight * 1.4));
         if (step.largeFont && !fontEnlarged) {
-            if (!triedWidgetOverride) {
-                usingWidgetFontOverride = true;
-                applyWidgetFonts(true);
-                QTextStream(stdout) << "Application font did not enlarge the process table; "
-                    "using per-widget baseline fonts at 150% for the font stress captures.\n";
-                QTimer::singleShot(250, &app, [&, step]() { saveStep(step, true); });
-                return;
-            }
             QTextStream(stderr) << "Font stress request did not enlarge the actual table font: baselineHeight="
                 << normalTableFontHeight << " actualHeight=" << tableFontHeight
                 << ". Refusing to save a misleading font150 screenshot.\n";
@@ -145,7 +126,6 @@ int main(int argc, char *argv[])
             << " actual=" << window.width() << 'x' << window.height()
             << " pixels=" << screenshot.width() << 'x' << screenshot.height()
             << " devicePixelRatio=" << screenshot.devicePixelRatio()
-            << " fontMethod=" << (usingWidgetFontOverride ? "per-widget" : "application")
             << " tablePointSize=" << processTable->font().pointSizeF()
             << " tablePixelSize=" << processTable->font().pixelSize()
             << " tableFontHeight=" << tableFontHeight
@@ -160,8 +140,6 @@ int main(int argc, char *argv[])
         }
         const CaptureStep step = steps.at(stepIndex);
         QApplication::setFont(step.largeFont ? largeFont : normalFont);
-        if (usingWidgetFontOverride)
-            applyWidgetFonts(step.largeFont);
         if (step.processes)
             window.showProcesses();
         else
@@ -169,7 +147,7 @@ int main(int argc, char *argv[])
         window.resize(step.requestedSize);
         // Returning to the Qt event loop lets deferred layout, resize and paint
         // events complete while real sampler updates continue normally.
-        QTimer::singleShot(250, &app, [&, step]() { saveStep(step, usingWidgetFontOverride); });
+        QTimer::singleShot(250, &app, [&, step]() { saveStep(step); });
     };
     QTimer::singleShot(3500, &app, [&]() {
         if (!model.snapshot().timestamp.isValid() || !model.resource(QStringLiteral("cpu"))
@@ -178,12 +156,6 @@ int main(int argc, char *argv[])
             app.exit(4);
             return;
         }
-        // Record settled fonts after the first real samples create the resource
-        // tiles. Each fallback size is derived from its own baseline exactly once.
-        widgetFonts.append({&window, window.font()});
-        for (auto *widget : window.findChildren<QWidget *>())
-            widgetFonts.append({widget, widget->font()});
-        normalTableFontHeight = processTable->fontMetrics().height();
         captureNext();
     });
     return app.exec();

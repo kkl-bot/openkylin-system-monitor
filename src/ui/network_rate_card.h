@@ -10,8 +10,9 @@ public:
     QLabel *valueLabel() const;
 protected:
     void changeEvent(QEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 private:
-    void updateValueFont();
+    void updateMinimumWidth();
     QLabel *value_;
 };
 } // namespace monitor::ui

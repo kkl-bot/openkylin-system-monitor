@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QVariant>
 #include <QVBoxLayout>
 
 namespace monitor::ui {
@@ -18,6 +19,11 @@ namespace {
 QLabel *label(const QString &text, const QString &name, QWidget *parent, bool flexible = true)
 {
     auto *result = new QLabel(text, parent); result->setObjectName(name);
+    if (name == QStringLiteral("pageTitle")) result->setProperty("textRole", "title");
+    else if (name == QStringLiteral("sectionTitle")) result->setProperty("textRole", "section");
+    else if (name == QStringLiteral("subtitle") || name == QStringLiteral("muted") || name == QStringLiteral("networkStatus")
+        || name == QStringLiteral("networkLinkNotice") || name == QStringLiteral("networkProxyNotice") || name == QStringLiteral("networkNotice"))
+        result->setProperty("textRole", "caption");
     result->setTextFormat(Qt::PlainText); result->setWordWrap(true);
     if (flexible) result->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     return result;

@@ -6,7 +6,10 @@
 #include <optional>
 
 class QComboBox;
+class QBoxLayout;
+class QCheckBox;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 
 namespace monitor::ui {
@@ -24,6 +27,9 @@ public:
     void showActionResult(const QString &message);
     QByteArray headerState() const;
     void restoreHeaderState(const QByteArray &state);
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override;
+    void changeEvent(QEvent *event) override;
 signals:
     void pauseRequested(bool paused);
     void intervalRequested(int milliseconds);
@@ -36,6 +42,8 @@ private:
     void refreshStatus();
     void openDetails();
     void confirmTermination(bool force);
+    void scheduleSearchLayoutUpdate();
+    void updateSearchLayout();
     ProcessTableModel *model_;
     ProcessFilterModel *filter_;
     ProcessTableView *table_;
@@ -47,8 +55,13 @@ private:
     QPushButton *force_;
     QPushButton *pause_;
     QComboBox *interval_;
+    QBoxLayout *searchLayout_;
+    QLineEdit *search_;
+    QCheckBox *ownOnly_;
+    QWidget *content_;
     QDateTime timestamp_;
     QString snapshotError_;
     bool paused_ = false;
+    bool searchLayoutUpdatePending_ = false;
 };
 } // namespace monitor::ui

@@ -7,7 +7,9 @@
 #include <QLabel>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QScopeGuard>
 #include <QSignalSpy>
+#include <QTableView>
 #include <QtTest>
 
 using namespace monitor;
@@ -21,6 +23,7 @@ private slots:
     void miniHasOnlyPaintedBarsAndOpensDetail();
     void narrowWindowKeepsLongPerformanceTextReachable();
     void controlsReflowWithoutShrinkingText();
+    void resizingKeepsOneReadableScaleAcrossPages();
 };
 namespace {
 Snapshot sampleSnapshot()
@@ -79,9 +82,12 @@ void UiTests::narrowWindowKeepsLongPerformanceTextReachable()
     snapshot.resources[0].temperature = Metric::unavailable(QStringLiteral("没有温度传感器，") .repeated(20));
     model.acceptSnapshot(snapshot);
     DetailWindow window(&model);
-    QFont larger = window.font(); larger.setPointSizeF(larger.pointSizeF() * 1.5); window.setFont(larger);
     window.resize(760, 500); window.show();
+    const QFont desktopFont = QApplication::font();
+    const auto restoreFont = qScopeGuard([&] { QApplication::setFont(desktopFont); });
+    QFont larger = desktopFont; larger.setPointSize(18); QApplication::setFont(larger);
     QTest::qWait(40);
+    QCOMPARE(window.font().pointSizeF(), 18.0);
     QCOMPARE(window.size(), QSize(760, 500));
     for (auto *tile : window.findChildren<ResourceTile *>())
         QVERIFY(tile->height() >= tile->heightForWidth(tile->width()));
@@ -111,6 +117,35 @@ void UiTests::controlsReflowWithoutShrinkingText()
     QVERIFY(second->width() >= second->sizeHint().width());
     host.resize(600, 200); QTest::qWait(10);
     QCOMPARE(second->y(), first->y());
+}
+void UiTests::resizingKeepsOneReadableScaleAcrossPages()
+{
+    MonitorModel model;
+    DetailWindow window(&model); window.resize(760, 500); window.show();
+    model.acceptSnapshot(sampleSnapshot());
+    auto *table = window.findChild<QTableView *>("processTable");
+    auto *proxy = window.findChild<QLabel *>("networkSystemProxy");
+    auto *axis = window.findChild<QWidget *>("networkHistoryChart");
+    auto *card = window.findChild<QLabel *>("cardValue");
+    QVERIFY(table && proxy && axis && card);
+    const int small = window.fontMetrics().height();
+    const int minimum = QFontMetrics(QFont(window.font().family(), 12), &window).height();
+    QVERIFY(small >= minimum);
+    for (const QSize size : {QSize(1180, 780), QSize(1600, 980), QSize(760, 500)}) {
+        window.resize(size);
+        QCoreApplication::processEvents();
+        const int body = window.fontMetrics().height();
+        if (size.width() > 760) QVERIFY(body > small);
+        else QCOMPARE(body, small);
+        window.showProcesses(); QCOMPARE(table->fontMetrics().height(), body);
+        window.showNetwork(); QCOMPARE(proxy->fontMetrics().height(), body);
+        QCOMPARE(axis->fontMetrics().height(), body);
+        window.selectResource("cpu"); QVERIFY(card->fontMetrics().height() > body);
+        for (const auto *tile : window.findChildren<ResourceTile *>())
+            QCOMPARE(tile->fontMetrics().height(), body);
+        for (const auto *title : window.findChildren<QLabel *>("pageTitle"))
+            QVERIFY(title->fontMetrics().height() >= card->fontMetrics().height());
+    }
 }
 QTEST_MAIN(UiTests)
 #include "ui_tests.moc"
