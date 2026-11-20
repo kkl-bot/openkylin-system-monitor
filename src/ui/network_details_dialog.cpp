@@ -21,7 +21,7 @@ NetworkDetailsDialog::NetworkDetailsDialog(const NetworkInterfaceInfo &interface
     setObjectName(QStringLiteral("networkDetailsDialog")); setWindowTitle(QStringLiteral("网络详细信息"));
     resize(qMax(640, fontMetrics().horizontalAdvance(QLatin1Char('M')) * 64), qMax(480, fontMetrics().height() * 24));
     auto *layout = new QVBoxLayout(this);
-    auto *notice = new QLabel(QStringLiteral("显示打开时的网卡快照；DNS 来源和代理配置不代表所有应用的实际行为。"), this);
+    auto *notice = new QLabel(QStringLiteral("显示打开时的网卡快照。"), this);
     notice->setObjectName(QStringLiteral("networkDetailsNotice")); notice->setProperty("textRole", "caption");
     notice->setTextFormat(Qt::PlainText); notice->setWordWrap(true);
     notice->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); layout->addWidget(notice);
@@ -53,7 +53,7 @@ NetworkDetailsDialog::NetworkDetailsDialog(const NetworkInterfaceInfo &interface
     lines.append({QString(), QStringLiteral("系统代理：") + networkProxyModeLabel(proxy.mode),
         QStringLiteral("系统代理来源：") + value(proxy.source), QStringLiteral("系统代理说明：") + value(proxy.detail),
         QStringLiteral("环境代理变量：") + networkEnvironmentProxyLabel(proxy),
-        QStringLiteral("代理是否生效由应用决定；链路状态不代表互联网可达。"), QString(),
+         QString(),
         QStringLiteral("累计接收：") + (interface.receivedBytes ? formatBytes(*interface.receivedBytes) : QStringLiteral("未提供")),
         QStringLiteral("累计发送：") + (interface.transmittedBytes ? formatBytes(*interface.transmittedBytes) : QStringLiteral("未提供"))});
     if (!interface.error.isEmpty()) lines.append(QStringLiteral("读取说明：") + interface.error);

@@ -170,7 +170,7 @@ void PerformancePage::refresh()
         compositionNotice_->setText(!capacityValid ? QStringLiteral("无法取得有效容量，组成比例不可用。")
             : (sample->details.value(QStringLiteral("统计方式")).contains(QStringLiteral("估算"))
                 ? QStringLiteral("可用内存按旧内核字段估算，包含可回收缓存。")
-                : QStringLiteral("可用内存包含可回收缓存，不等于仅空闲内存。")));
+                : QStringLiteral("可用内存包含可回收缓存。")));
     }
     QStringList information;
     QSet<QString> summaryKeys;
@@ -187,7 +187,7 @@ void PerformancePage::refresh()
     temperatureChart_->setVisible(hasTemperature); temperatureHeading_->setVisible(hasTemperature);
     temperatureNotice_->setText(sample->temperature.value ? QStringLiteral("温度取已识别传感器的最高有效读数。")
         : QStringLiteral("温度不可用：") + sample->temperature.reason);
-    environment_->setText(model_->snapshot().isWsl ? QStringLiteral("WSL 2 · 读数反映 Linux 环境，不代表 Windows 主机完整负载。") : QString());
+    environment_->setText(model_->snapshot().isWsl ? QStringLiteral("WSL 2 · 读数反映 wsl。") : QString());
     environment_->setVisible(!environment_->text().isEmpty());
     const auto time = model_->snapshot().timestamp;
     timestamp_->setText(time.isValid() ? QStringLiteral("更新于 ") + time.toLocalTime().toString(QStringLiteral("HH:mm:ss")) : QStringLiteral("等待首次采样"));
