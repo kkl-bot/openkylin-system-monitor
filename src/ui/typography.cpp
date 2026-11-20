@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ui/typography.h"
+#include "ui/ui_font.h"
 #include <QApplication>
 #include <QEvent>
 #include <QFontMetricsF>
@@ -58,11 +59,11 @@ private:
 };
 
 WindowTypography::WindowTypography(QWidget *window)
-    : QObject(window), window_(window), desktopFont_(QApplication::font())
+    : QObject(window), window_(window), desktopFont_(uiFont(QApplication::font()))
 {
     window_->installEventFilter(this);
     connect(qApp, &QGuiApplication::fontChanged, this, [this](const QFont &font) {
-        desktopFont_ = font;
+        desktopFont_ = uiFont(font);
         update(true);
     });
     update(true);
@@ -72,7 +73,8 @@ bool WindowTypography::eventFilter(QObject *, QEvent *event)
 {
     if (event->type() == QEvent::Resize || event->type() == QEvent::ScreenChangeInternal)
         update(false);
-    else if (event->type() == QEvent::Show || event->type() == QEvent::StyleChange)
+    else if (event->type() == QEvent::Show || event->type() == QEvent::StyleChange
+             || event->type() == QEvent::FontChange)
         update(true);
     return false;
 }
@@ -101,7 +103,8 @@ QFont typographyFont(const QFont &body, TextRole role)
     qreal scale = 1.0;
     if (role == TextRole::Title) scale = 1.5;
     if (role == TextRole::Metric) scale = 1.35;
-    QFont result = scale == 1.0 ? body : resizedFont(body, fontSize(body) * scale);
+    const QFont selected = uiFont(body);
+    QFont result = scale == 1.0 ? selected : resizedFont(selected, fontSize(selected) * scale);
     if (role == TextRole::Title || role == TextRole::Section || role == TextRole::Metric)
         result.setWeight(QFont::DemiBold);
     return result;

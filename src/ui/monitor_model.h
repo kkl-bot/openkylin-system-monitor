@@ -17,6 +17,7 @@ public:
     void acceptSnapshot(const Snapshot &snapshot);
     const Snapshot &snapshot() const;
     const ResourceSample *resource(const QString &id) const;
+    QString resourceTitle(const ResourceSample &sample) const;
     QVector<HistoryPoint> history(const QString &id) const;
 signals:
     void changed();

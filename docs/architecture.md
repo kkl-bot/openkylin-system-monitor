@@ -11,10 +11,21 @@ SamplingThread → MonitorService（跨线程快照信号）
             ↓
 MonitorModel（每个设备最近 60 秒数据）
             ↓
-DetailWindow / MiniWindow / HistoryChart / ResourceTile
+DetailWindow → PerformanceWorkspace → PerformancePage / HistoryChart / MemoryCompositionBar
+            ↘ MiniWindow / ResourceTile
 ```
 
 `ApplicationController` 负责服务与界面的连接、持久化和托盘。它不包含任何硬件解析逻辑。
+
+1.4.0 将全局窗口、性能资源选择和单资源视图拆到不同文件。
+`PerformanceWorkspace` 管理资源列表及窄窗下拉框，`PerformancePage` 消费已有历史与快照，
+`MemoryCompositionBar` 只绘制当前快照的已用 / 可用比例。主曲线继续使用历史百分比，
+不使用当前容量倒推历史字节值；视图层不新增硬件读取。详见 [性能工作区说明](performance-workspace.md)。
+
+1.4.1 将独立窗口外观与字体选择分别放入 `widget_appearance.*` 和 `ui_font.*`，
+样式资源位于 `resources/styles/`。英文和数字优先使用已安装的 Ubuntu，中文优先使用华文黑体（STHeiti），
+Noto Sans CJK SC 作为中文回退字体；
+`typography.*` 继续按系统字号、窗口大小和文字角色分配字体；这些模块不影响采集口径或 Peony 宿主主题。
 
 ## 任务管理器分支（1.2）
 

@@ -1,21 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 #include "ui/monitor_model.h"
 #include <QWidget>
 
-class QLabel;
-class QPushButton;
-class QComboBox;
-class QVBoxLayout;
 class QStackedWidget;
-class QShowEvent;
-class QHideEvent;
-class QResizeEvent;
-class QFrame;
-class QGridLayout;
-class QScrollArea;
 namespace monitor::ui {
-class HistoryChart;
-class ResourceTile;
+class PerformanceWorkspace;
+class TaskNavigation;
 class ProcessPage;
 class NetworkPage;
 
@@ -26,6 +17,10 @@ public:
     void setPaused(bool paused);
     void setInterval(int milliseconds);
     void selectResource(const QString &id);
+    QString selectedResource() const;
+    void setNavigationCollapsed(bool collapsed);
+    bool navigationCollapsed() const;
+    void showPerformance();
     void showProcesses();
     bool showingProcesses() const;
     ProcessPage *processPage() const;
@@ -43,43 +38,12 @@ protected:
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
     void changeEvent(QEvent *event) override;
-    void resizeEvent(QResizeEvent *event) override;
 private:
-    void updateLayout();
     void updateActivePage();
-    void refresh();
-    void rebuildResources();
-    MonitorModel *model_;
-    QString selectedId_ = "cpu";
-    QStringList resourceIds_;
-    QVector<ResourceTile *> tiles_;
-    QVBoxLayout *resourcesLayout_;
-    QLabel *title_;
-    QLabel *subtitle_;
-    QLabel *usage_;
-    QLabel *temperature_;
-    QLabel *capacity_;
-    QLabel *capacityLabel_;
-    QLabel *notice_;
-    QLabel *details_;
-    QLabel *environment_;
-    QLabel *status_;
-    QLabel *timestamp_;
-    QPushButton *pause_;
-    QComboBox *interval_;
-    HistoryChart *usageChart_;
-    HistoryChart *temperatureChart_;
+    TaskNavigation *navigation_;
     QStackedWidget *pages_;
+    PerformanceWorkspace *performance_;
     ProcessPage *processPage_;
-    QPushButton *processNavigation_;
     NetworkPage *networkPage_;
-    QPushButton *networkNavigation_;
-    QFrame *sidebar_ = nullptr;
-    QLabel *brand_ = nullptr;
-    QScrollArea *performanceScroll_ = nullptr;
-    QVBoxLayout *performanceLayout_ = nullptr;
-    QGridLayout *cardsLayout_ = nullptr;
-    QVector<QFrame *> cards_;
-    int cardColumns_ = 0;
 };
 } // namespace monitor::ui

@@ -1,0 +1,17 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+QWidget { color: palette(window-text); }
+QWidget#detailWindow { background: palette(window); }
+QFrame#sidebar { background: palette(alternate-base); border-right: 1px solid palette(mid); }
+QFrame#metricCard { background: palette(alternate-base); border: 1px solid palette(mid); border-radius: 10px; }
+QPushButton { border: 1px solid palette(mid); border-radius: 6px; padding: 7px 13px; background: palette(button); }
+QPushButton:hover { background: palette(alternate-base); }
+QPushButton:checked { background: palette(highlight); color: palette(highlighted-text); }
+QPushButton:disabled { background: palette(window); color: palette(mid); border-color: palette(midlight); }
+QPushButton#primary { background: palette(highlight); color: palette(highlighted-text); border-color: palette(highlight); }
+QComboBox { border: 1px solid palette(mid); border-radius: 6px; padding: 6px 10px; min-width: 65px; background: palette(base); }
+QComboBox::drop-down { border: none; width: 20px; }
+QMenu { background: palette(window); border: 1px solid palette(mid); padding: 5px; }
+QMenu::item { padding: 7px 20px; }
+QMenu::item:selected { background: palette(highlight); color: palette(highlighted-text); }
+QScrollArea { border: none; background: transparent; }
+QToolTip { background: palette(tool-tip-base); color: palette(tool-tip-text); border: none; padding: 8px; }

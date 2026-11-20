@@ -17,19 +17,26 @@ if not DEB.is_file():
     raise FileNotFoundError("Build the matching Debian package with scripts/package.sh first")
 SCREENSHOT_NAMES = {
     "processes-1180x780": "task-manager",
+    "processes-760x500": "processes-760x500",
+    "memory-1180x780": "memory-1180x780",
+    "memory-760x500": "memory-760x500",
+    "cpu-1180x780": "cpu-1180x780",
+    "cpu-760x500": "cpu-760x500",
     "network-1180x780": "network-1180x780",
     "network-760x500": "network-760x500",
     "network-details": "network-details",
     "cpu-760x500-font150": "cpu-760x500-font150",
+    "memory-760x500-font150": "memory-760x500-font150",
+    "processes-760x500-font150": "processes-760x500-font150",
 }
 screenshots = {
-    f"screenshots/{destination}-{theme}.png": ROOT / f"docs/previews/typography/{theme}/{source}.png"
+    f"screenshots/{destination}-{theme}.png": ROOT / f"docs/previews/task-manager-1.4/{theme}/{source}.png"
     for theme in ("light", "dark")
     for source, destination in SCREENSHOT_NAMES.items()
 }
 missing = [str(path.relative_to(ROOT)) for path in screenshots.values() if not path.is_file()]
 if missing:
-    raise FileNotFoundError("Generate current typography screenshots before packaging: " + ", ".join(missing))
+    raise FileNotFoundError("Generate current task-manager-1.4 screenshots before packaging: " + ", ".join(missing))
 runpy.run_path(str(ROOT / "scripts/prepare-release.py"), run_name="__main__")
 
 prefix = f"kylin-monitor-{VERSION}-MVP/"
@@ -49,7 +56,7 @@ for name, screenshot in screenshots.items():
 
 files["提交说明.md"] = f"""# Kylin Monitor {VERSION} · 任务管理器 MVP
 
-源码与完整 README 位于 source/；Debian 安装包位于 packages/；当前进程、网络和大字体性能界面截图位于 screenshots/。
+源码与完整 README 位于 source/；Debian 安装包位于 packages/；当前进程、内存、CPU、网络和大字体界面截图位于 screenshots/。
 source/docs/previews/ 保留完整的性能窗口和 Peony 插件历史验收截图。
 
 在 openKylin 3.0 amd64 内执行：
@@ -62,13 +69,15 @@ sudo apt install ./packages/{DEB.name}
 
 进程页支持搜索、按 CPU / 内存 / 磁盘读写排序、详情查看及确认后结束当前普通用户进程。
 网络页显示按网卡采集的上传、下载速度和代理配置状态；“详细信息”包含 IP、网关、DNS 和子网掩码。
-左侧 CPU、GPU、内存打开性能曲线；Ctrl+M 切换备用柱状图悬浮窗。
+在“性能”工作区选择 CPU、内存或 GPU；窄窗口使用资源下拉框切换。
+内存页显示真实已用/可用组成比例，主曲线保留百分比口径；刷新间隔、暂停和极简入口位于工作区底部。
+Ctrl+M 切换备用柱状图悬浮窗。
 安装或升级后注销并重新登录，可在桌面“更多插件”中添加原生 Peony 小插件。
 卸载命令：sudo apt remove kylin-monitor。用户配置会保留。
 
-使用及验证说明：source/docs/network-monitor.md、source/docs/network-verification.md、source/docs/task-manager.md。
+使用及验证说明：source/docs/performance-workspace.md、source/docs/network-monitor.md、source/docs/network-verification.md、source/docs/task-manager.md。
 运行目标为 openKylin 3.0 amd64；监测范围为 Linux 环境，不能管理 Windows 宿主进程。
-历史功能验证记录以文档注明的版本、环境和范围为准；当前字号适配截图来自 source/docs/previews/typography/。
+历史功能验证记录以文档注明的版本、环境和范围为准；当前界面截图来自 source/docs/previews/task-manager-1.4/。
 WSL 未提供的温度或 GPU 指标显示不可用。开源许可证为 GPL-3.0-or-later，详见 source/LICENSE。
 
 MANIFEST.json 提供每个归档文件的 SHA-256；外部 SHA256SUMS-{VERSION}.txt 用于校验 ZIP 和其他发布文件。

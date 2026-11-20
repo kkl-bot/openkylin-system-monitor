@@ -12,6 +12,7 @@ public:
     QSize minimumSizeHint() const override;
     int heightForWidth(int width) const override;
 protected:
+    bool event(QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
     void changeEvent(QEvent *event) override;
 private:

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ui/process_table_view.h"
 #include "ui/process_table_model.h"
+#include "ui/process_table_header.h"
 #include <QEvent>
 #include <QFontMetrics>
 #include <QHeaderView>
@@ -11,6 +12,7 @@
 #include <QStyle>
 #include <QStringList>
 #include <QTimer>
+#include <QVariant>
 #include <algorithm>
 
 namespace monitor::ui {
@@ -19,6 +21,10 @@ const QByteArray statePrefix("KMPH1:");
 }
 ProcessTableView::ProcessTableView(QWidget *parent) : QTableView(parent)
 {
+    setHorizontalHeader(new ProcessTableHeader(this));
+    horizontalHeader()->setObjectName(QStringLiteral("processHeader"));
+    horizontalHeader()->setProperty("textRole", QStringLiteral("section"));
+    horizontalHeader()->setHighlightSections(false);
     horizontalHeader()->setSectionsMovable(true);
     horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     horizontalHeader()->setMinimumSectionSize(32);
@@ -26,6 +32,7 @@ ProcessTableView::ProcessTableView(QWidget *parent) : QTableView(parent)
     verticalHeader()->hide();
     setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    setTextElideMode(Qt::ElideRight);
     horizontalHeader()->installEventFilter(this);
     connect(horizontalHeader(), &QHeaderView::sectionResized, this, [this](int column, int, int) {
         if (!updatingMetrics_) { manualColumns_.insert(column); scheduleMetricsUpdate(); }
@@ -118,9 +125,10 @@ void ProcessTableView::updateMetrics()
     ensurePolished();
     horizontalHeader()->ensurePolished();
     const QFontMetrics text(font(), this), heading(horizontalHeader()->font(), horizontalHeader());
-    const int padding = qMax(12, text.height() / 2);
-    const int headerMargin = qMax(4, style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, horizontalHeader()));
-    const int rowHeight = text.height() + padding;
+    const int horizontalPadding = qMax(24, text.height());
+    const int verticalPadding = qMax(12, text.height() / 2);
+    const int headerMargin = qMax(8, style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, horizontalHeader()));
+    const int rowHeight = text.height() + verticalPadding;
     verticalHeader()->setMinimumSectionSize(rowHeight);
     verticalHeader()->setDefaultSectionSize(rowHeight);
     horizontalHeader()->setMinimumHeight(heading.height() + headerMargin * 2 + 4);
@@ -135,7 +143,7 @@ void ProcessTableView::updateMetrics()
         const QString label = model()->headerData(column, Qt::Horizontal, Qt::DisplayRole).toString();
         const int headingWidth = qMax(horizontalHeader()->sectionSizeHint(column),
             heading.horizontalAdvance(label) + headerMargin * 2 + heading.height());
-        const int contentWidth = text.horizontalAdvance(samples.value(column, label)) + padding;
+        const int contentWidth = text.horizontalAdvance(samples.value(column, label)) + horizontalPadding;
         widths[column] = manualColumns_.contains(column) ? columnWidth(column)
             : qMax(horizontalHeader()->minimumSectionSize(), qMax(headingWidth, contentWidth));
         if (!isColumnHidden(column)) total += widths[column];

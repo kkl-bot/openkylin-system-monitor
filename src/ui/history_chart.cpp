@@ -1,4 +1,6 @@
 #include "ui/history_chart.h"
+#include "ui/paint_palette.h"
+#include "ui/resource_history_geometry.h"
 #include "ui/theme.h"
 #include "ui/typography.h"
 #include <QEvent>
@@ -109,6 +111,7 @@ void HistoryChart::changeEvent(QEvent *event)
         updateGeometry();
         update();
     }
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange) update();
 }
 void HistoryChart::paintEvent(QPaintEvent *)
 {
@@ -124,15 +127,15 @@ void HistoryChart::paintEvent(QPaintEvent *)
     const QString message = sample ? QStringLiteral("暂无可用读数") : QStringLiteral("正在读取系统信息…");
     if (plot.width() <= 0 || plot.height() <= 0) {
         if (!current.value) {
-            painter.setPen(palette().color(QPalette::PlaceholderText));
+            painter.setPen(secondaryPaintText(palette()));
             painter.setFont(font());
             drawWrappedMessage(painter, rect().adjusted(layout.padding, layout.padding, -layout.padding, -layout.padding), message);
         }
         return;
     }
-    const QColor color = sample ? resourceColor(sample->kind) : QColor("#2979e8");
+    const QColor color = chartAccentColor(sample ? resourceColor(sample->kind) : palette().color(QPalette::Highlight), palette());
     painter.fillRect(plot, palette().color(QPalette::Base));
-    QColor grid = palette().color(QPalette::Mid); grid.setAlpha(85);
+    const QColor grid = chartGridColor(palette());
     painter.setPen(QPen(grid, 1));
     for (int i = 0; i <= 6; ++i) {
         const double x = plot.left() + i * plot.width() / 6.0;
@@ -146,13 +149,16 @@ void HistoryChart::paintEvent(QPaintEvent *)
         painter.setPen(QPen(grid, 1));
         painter.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y));
         if (i % labelStride == 0 && (i == 0 || plot.height() >= layout.labelHeight + layout.gap)) {
-            painter.setPen(palette().color(QPalette::PlaceholderText));
+            painter.setPen(secondaryPaintText(palette()));
             painter.drawText(QRectF(plot.right() + layout.gap, y - layout.labelHeight / 2.0,
                                     layout.labelWidth, layout.labelHeight),
                              Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine, layout.labels[i]);
         }
     }
-    painter.setPen(palette().color(QPalette::PlaceholderText));
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(chartBorderColor(palette()), 1));
+    painter.drawRect(plot);
+    painter.setPen(secondaryPaintText(palette()));
     // The two labels have different widths; equal half-width slots can elide
     // "60 秒前" even when the combined text fits comfortably in the plot.
     const int endTimeWidth = qMin(layout.endTimeWidth, qMax(0, int(plot.width())));
@@ -165,35 +171,22 @@ void HistoryChart::paintEvent(QPaintEvent *)
                      painter.fontMetrics().elidedText(QStringLiteral("现在"), Qt::ElideLeft, endTimeWidth));
     painter.save();
     painter.setClipRect(plot.adjusted(-1, -1, 1, 1));
-    QVector<QPointF> segment;
-    const auto flush = [&]() {
-        if (segment.isEmpty()) return;
+    const auto segments = resourceHistorySegments(points, model_->snapshot().timestamp, plot,
+        temperature_ ? ResourceHistoryMetric::Temperature : ResourceHistoryMetric::Utilization, maximum);
+    for (const auto &segment : segments) {
         QPainterPath line; line.moveTo(segment.first());
         for (int i = 1; i < segment.size(); ++i) line.lineTo(segment[i]);
         QPainterPath fill = line;
         fill.lineTo(segment.last().x(), plot.bottom());
         fill.lineTo(segment.first().x(), plot.bottom()); fill.closeSubpath();
-        QColor translucent = color; translucent.setAlpha(25);
-        painter.fillPath(fill, translucent);
-        painter.setPen(QPen(color, 2)); painter.drawPath(line);
+        painter.fillPath(fill, chartFillColor(color, palette()));
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(color, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin)); painter.drawPath(line);
         if (segment.size() == 1) { painter.setBrush(color); painter.drawEllipse(segment.first(), 2, 2); }
-        segment.clear();
-    };
-    QDateTime previous;
-    for (const auto &point : points) {
-        const auto value = temperature_ ? point.temperature : point.utilization;
-        if (!value || (previous.isValid() && previous.msecsTo(point.timestamp) > 6500)) flush();
-        if (value) {
-            const auto age = point.timestamp.msecsTo(model_->snapshot().timestamp);
-            segment.append({plot.right() - age / 60000.0 * plot.width(),
-                            plot.bottom() - qBound(0.0, *value / maximum, 1.0) * plot.height()});
-        }
-        previous = point.timestamp;
     }
-    flush();
     painter.restore();
     if (!current.value) {
-        painter.setPen(palette().color(QPalette::PlaceholderText));
+        painter.setPen(secondaryPaintText(palette()));
         painter.setFont(font());
         const QRectF messageBounds = plot.adjusted(layout.gap, layout.gap, -layout.gap, -layout.gap);
         drawWrappedMessage(painter, messageBounds, message);

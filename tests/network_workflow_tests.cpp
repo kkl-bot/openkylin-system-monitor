@@ -116,6 +116,9 @@ void NetworkWorkflowTests::selectedInterfaceAndPageSurviveRestart()
         for (auto *widget : QApplication::topLevelWidgets())
             if (auto *detail = qobject_cast<DetailWindow *>(widget)) window = detail;
         QVERIFY(window);
+        window->setNavigationCollapsed(true);
+        window->selectResource(QStringLiteral("memory"));
+        window->showNetwork();
         window->networkPage()->setSelectedInterface(selected);
         // Exercise the same persistence hook as a normal application exit,
         // with QSettings redirected to this test's temporary directory.
@@ -131,6 +134,8 @@ void NetworkWorkflowTests::selectedInterfaceAndPageSurviveRestart()
             if (auto *detail = qobject_cast<DetailWindow *>(widget)) window = detail;
         QVERIFY(window && window->showingNetwork());
         QCOMPARE(window->networkPage()->selectedInterface(), selected);
+        QVERIFY(window->navigationCollapsed());
+        QCOMPARE(window->selectedResource(), QStringLiteral("memory"));
     }
 }
 QTEST_MAIN(NetworkWorkflowTests)

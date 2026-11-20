@@ -98,8 +98,14 @@ void TaskManagerWorkflowTests::findInspectAndTerminateOnlyOurChild()
     auto *result = window->findChild<QLabel *>("processActionResult");
     QVERIFY(result && !result->text().isEmpty());
     QTRY_VERIFY_WITH_TIMEOUT(!window->findChildren<ResourceTile *>().isEmpty(), 5000);
-    QTest::mouseClick(window->findChildren<ResourceTile *>().first(), Qt::LeftButton);
+    auto *performance = window->findChild<QPushButton *>("performanceNavigation");
+    QVERIFY(performance && performance->isVisible());
+    QTest::mouseClick(performance, Qt::LeftButton);
     QVERIFY(!window->showingProcesses());
+    auto *resource = window->findChildren<ResourceTile *>().first();
+    QVERIFY(resource->isVisible());
+    QTest::mouseClick(resource, Qt::LeftButton);
+    QCOMPARE(window->selectedResource(), resource->resourceId());
     controller.showMini();
     QVERIFY(!window->isVisible());
     controller.showProcesses();

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.4.1 — 2026-11-20
+
+- Refine the standalone task manager's light appearance with cool white surfaces, blue-gray structure, ink-blue text and indigo primary actions; retain dark-mode support.
+- Use restrained blue process-load shading, align table headings with their values, and improve column spacing while preserving user widths, ordering and safe process controls.
+- Add a system search icon when available and distinguish enabled, disabled, focused and selected controls.
+- Prefer installed Ubuntu for Latin text and numbers, and STHeiti for Chinese text; retain Noto Sans CJK SC as a Chinese fallback and the existing system-size/window-size typography hierarchy.
+- Verified all 16 CTest suites on openKylin 3.0, including live UKUI theme switching and font fallback. Updated the light and dark runtime screenshots in `docs/previews/task-manager-1.4/`.
+
+## 1.4.0 — 2026-11-20
+
+- Separate global navigation, performance resource selection and resource details in a Windows 11 task-manager-inspired layout.
+- Place process names, CPU usage and resident memory first in new table layouts. Color CPU and memory cells by the process share and keep existing column preferences on upgrade.
+- Remember the selected performance resource and the navigation panel's expanded or collapsed state.
+- Put the primary utilization chart directly below the resource/device heading; keep performance controls in a persistent workspace footer.
+- Show memory composition using sampled used/available capacity and explicit percentages, without inventing unsupported memory categories or historical capacity data.
+- Preserve CPU/GPU metrics and temperature information, and use a compact resource picker when the window cannot fit the resource list.
+- Capture real CPU, memory and process layouts at three window sizes and with enlarged fonts; collect current network screenshots in `docs/previews/task-manager-1.4/` for release packaging.
+
 ## 1.3.1 — 2026-11-20
 
 - Apply one typography hierarchy to page titles, metrics, body text, captions, charts and read-only dialogs.

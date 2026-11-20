@@ -7,6 +7,7 @@
 #include "ui/theme.h"
 #include <QApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QFontMetrics>
 #include <QIcon>
@@ -19,16 +20,19 @@
 
 namespace {
 
+enum class CapturePage { Processes, Cpu, Memory };
+
 struct CaptureStep {
     QSize requestedSize;
-    bool processes = false;
+    CapturePage page = CapturePage::Cpu;
     bool largeFont = false;
 };
 
 QString captureName(const CaptureStep &step)
 {
     return QStringLiteral("%1-%2x%3%4.png")
-        .arg(step.processes ? QStringLiteral("processes") : QStringLiteral("cpu"))
+        .arg(step.page == CapturePage::Processes ? QStringLiteral("processes")
+            : step.page == CapturePage::Memory ? QStringLiteral("memory") : QStringLiteral("cpu"))
         .arg(step.requestedSize.width()).arg(step.requestedSize.height())
         .arg(step.largeFont ? QStringLiteral("-font150") : QString());
 }
@@ -41,6 +45,26 @@ QFont enlargedFont(const QFont &base)
     else if (base.pixelSize() > 0)
         result.setPixelSize(qMax(1, qRound(base.pixelSize() * 1.5)));
     return result;
+}
+
+bool hasWarmHistory(const monitor::ui::MonitorModel &model, const QString &resourceId)
+{
+    QDateTime firstSample;
+    QDateTime lastSample;
+    int sampleCount = 0;
+    for (const auto &point : model.history(resourceId)) {
+        if (!point.timestamp.isValid() || !point.utilization) {
+            firstSample = {};
+            lastSample = {};
+            sampleCount = 0;
+            continue;
+        }
+        if (!firstSample.isValid())
+            firstSample = point.timestamp;
+        lastSample = point.timestamp;
+        ++sampleCount;
+    }
+    return sampleCount >= 16 && firstSample.msecsTo(lastSample) >= 15000;
 }
 
 } // namespace
@@ -77,6 +101,10 @@ int main(int argc, char *argv[])
     });
     // Keep both read-only samplers active for the capture sequence so switching
     // pages does not clear the process rate baseline between screenshots.
+    QElapsedTimer samplingTimer;
+    samplingTimer.start();
+    resourceService.setInterval(1000);
+    processService.setInterval(1000);
     processService.setActive(true);
     resourceService.start();
     processService.start();
@@ -92,18 +120,25 @@ int main(int argc, char *argv[])
     }
     int normalTableFontHeight = 0;
     const QVector<CaptureStep> steps{
-        {{760, 500}, true, false}, {{760, 500}, false, false},
-        {{1024, 720}, true, false}, {{1024, 720}, false, false},
-        {{1180, 780}, true, false}, {{1180, 780}, false, false},
-        {{760, 500}, true, true}, {{760, 500}, false, true}
+        {{760, 500}, CapturePage::Processes, false}, {{760, 500}, CapturePage::Memory, false}, {{760, 500}, CapturePage::Cpu, false},
+        {{1024, 720}, CapturePage::Processes, false}, {{1024, 720}, CapturePage::Memory, false}, {{1024, 720}, CapturePage::Cpu, false},
+        {{1180, 780}, CapturePage::Processes, false}, {{1180, 780}, CapturePage::Memory, false}, {{1180, 780}, CapturePage::Cpu, false},
+        {{760, 500}, CapturePage::Processes, true}, {{760, 500}, CapturePage::Memory, true}, {{760, 500}, CapturePage::Cpu, true}
     };
     int stepIndex = 0;
     std::function<void()> captureNext;
     const auto saveStep = [&](CaptureStep step) {
         const int tableFontHeight = processTable->fontMetrics().height();
-        if (!step.largeFont && step.processes && step.requestedSize == QSize(760, 500)) {
+        if (!step.largeFont && step.page == CapturePage::Processes && step.requestedSize == QSize(760, 500)) {
             normalTableFontHeight = tableFontHeight;
             largeFont = enlargedFont(processTable->font());
+        }
+        const auto *memory = model.resource(QStringLiteral("memory"));
+        if (step.page == CapturePage::Memory && (!memory || !memory->usedBytes || !memory->totalBytes
+            || *memory->totalBytes == 0 || *memory->usedBytes > *memory->totalBytes)) {
+            QTextStream(stderr) << "Valid real memory capacity was not received; refusing to save a memory screenshot.\n";
+            app.exit(4);
+            return;
         }
         const bool fontEnlarged = tableFontHeight >= qMax(normalTableFontHeight + 1,
                                                        qRound(normalTableFontHeight * 1.4));
@@ -129,7 +164,9 @@ int main(int argc, char *argv[])
             << " tablePointSize=" << processTable->font().pointSizeF()
             << " tablePixelSize=" << processTable->font().pixelSize()
             << " tableFontHeight=" << tableFontHeight
-            << " baselineTableFontHeight=" << normalTableFontHeight << '\n';
+            << " baselineTableFontHeight=" << normalTableFontHeight
+            << " memoryUsedBytes=" << (memory && memory->usedBytes ? QString::number(*memory->usedBytes) : QStringLiteral("unavailable"))
+            << " memoryTotalBytes=" << (memory && memory->totalBytes ? QString::number(*memory->totalBytes) : QStringLiteral("unavailable")) << '\n';
         ++stepIndex;
         captureNext();
     };
@@ -140,23 +177,40 @@ int main(int argc, char *argv[])
         }
         const CaptureStep step = steps.at(stepIndex);
         QApplication::setFont(step.largeFont ? largeFont : normalFont);
-        if (step.processes)
+        if (step.page == CapturePage::Processes) {
             window.showProcesses();
-        else
-            window.selectResource(QStringLiteral("cpu"));
+            if (processTable->model()->rowCount() > 0) processTable->selectRow(0);
+        } else {
+            window.selectResource(step.page == CapturePage::Memory ? QStringLiteral("memory") : QStringLiteral("cpu"));
+        }
         window.resize(step.requestedSize);
         // Returning to the Qt event loop lets deferred layout, resize and paint
         // events complete while real sampler updates continue normally.
         QTimer::singleShot(250, &app, [&, step]() { saveStep(step); });
     };
-    QTimer::singleShot(3500, &app, [&]() {
-        if (!model.snapshot().timestamp.isValid() || !model.resource(QStringLiteral("cpu"))
-            || !receivedProcesses) {
-            QTextStream(stderr) << "Real CPU and process samples were not received; no screenshots saved.\n";
-            app.exit(4);
+    QTimer warmupTimer;
+    warmupTimer.setInterval(250);
+    QObject::connect(&warmupTimer, &QTimer::timeout, &app, [&]() {
+        if (samplingTimer.elapsed() < 15000 || !receivedProcesses
+            || !hasWarmHistory(model, QStringLiteral("cpu"))
+            || !hasWarmHistory(model, QStringLiteral("memory")))
             return;
-        }
+        warmupTimer.stop();
+        QTextStream(stdout) << "Real CPU and memory histories span at least 15 seconds; starting capture after "
+            << samplingTimer.elapsed() << " ms.\n";
         captureNext();
+    });
+    warmupTimer.start();
+    QTimer::singleShot(45000, &app, [&]() {
+        if (!warmupTimer.isActive())
+            return;
+        warmupTimer.stop();
+        QTextStream(stderr) << "Timed out waiting for 15 seconds of real CPU/memory history and process samples; no screenshots saved.\n";
+        app.exit(4);
+    });
+    QTimer::singleShot(60000, &app, [&]() {
+        QTextStream(stderr) << "Layout capture exceeded the 60-second overall deadline.\n";
+        app.exit(6);
     });
     return app.exec();
 }

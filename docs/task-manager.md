@@ -1,12 +1,16 @@
-# 任务管理器扩展（1.2）
+# 任务管理器进程管理
 
-详细窗口增加“进程”页，左侧的 CPU、GPU 和内存条目仍打开性能曲线。
+详细窗口的“进程”页用于查看和管理进程；CPU、GPU 和内存位于独立的“性能”工作区。
+1.4 系列的资源列表、内存组成及窄窗切换方式见 [性能工作区说明](performance-workspace.md)。
 使用 `/usr/bin/kylin-monitor --processes` 可直接进入进程页。首次启动默认显示进程，
 正常退出时保存最后访问的页面及进程表格列宽、顺序和排序。
 
 ## 进程列表
 
 列表包含名称、PID、用户、状态、CPU、常驻内存、内存比例、线程数及磁盘读写速率。
+首次使用时，名称、CPU、内存排在最前。CPU 和内存单元格按该进程的实际占比着色，占用越高颜色越深。
+1.4.1 使用克制的蓝色负载层次；选中行时使用统一的选中高亮，零占用与缺失读数分别显示数值和“—”，均不添加负载底色。
+表头与数据按列对齐，数字靠右；手动调整的列宽、顺序与排序不会被字号适配覆盖。
 点击表头按数值排序，搜索名称、PID 或用户；可仅查看自己的进程。
 选中一行查看详情，可读到父 PID、命令行和可执行文件位置。
 
@@ -44,13 +48,16 @@ CPU 列表示占本机全部逻辑 CPU 总容量的比例，与性能页的 0–
 | `src/backend/process_sampling_thread.*` | 后台采样、等待、恢复基线 |
 | `src/backend/process_service.*` | 主线程信号接口及过期快照过滤 |
 | `src/ui/process_table_model.*` | 表格数据及数值排序角色 |
+| `src/ui/process_table_view.*` | 字号驱动的表格尺寸及用户列设置恢复 |
+| `src/ui/process_heat_delegate.*` | 真实 CPU / 内存占比底色及文字对比保护 |
 | `src/ui/process_filter_model.*` | 搜索与用户过滤 |
 | `src/ui/process_page.*` | 进程页、选择保持和动作确认 |
 | `src/ui/process_details_dialog.*` | 只读详情对话框 |
 | `src/ui/process_presentation.*` | 表格与详情共用的中文状态转换 |
 | `src/app/process_controller.*` | 采样、进程操作与界面接线 |
 
-原有 `DetailWindow` 仅增加页面导航，`ApplicationController` 负责少量连接与设置保存。
+`DetailWindow` 负责全局页面导航，性能工作区、进程页与网络页使用各自的视图模块；
+`ApplicationController` 负责服务接线与设置保存。
 Peony 动态模块继续只链接资源采集后端，进程管理库只在独立任务管理器中使用。
 
 接口依据：[Linux procfs 文档](https://docs.kernel.org/filesystems/proc.html)、

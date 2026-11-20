@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ui/network_history_chart.h"
 #include "ui/network_presentation.h"
+#include "ui/paint_palette.h"
+#include "ui/theme.h"
 #include <QEvent>
 #include <QFontMetrics>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPolygonF>
 #include <QSet>
 #include <QTextOption>
 #include <QVariant>
@@ -80,6 +83,7 @@ void NetworkHistoryChart::changeEvent(QEvent *event)
     if (event->type() == QEvent::FontChange || event->type() == QEvent::ApplicationFontChange || event->type() == QEvent::StyleChange) {
         updateGeometry(); update();
     }
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange) update();
 }
 void NetworkHistoryChart::paintEvent(QPaintEvent *)
 {
@@ -98,28 +102,42 @@ void NetworkHistoryChart::paintEvent(QPaintEvent *)
     const int legendHeight = (height + gap) * (stackedLegend ? 2 : 1);
     const QRectF plot(gap, legendHeight + gap, width() - axisWidth - gap * 3,
         QWidget::height() - legendHeight - height - gap * 3);
-    const QColor download = palette().color(QPalette::Highlight);
-    const QColor upload = palette().color(QPalette::Window).lightness() < 128 ? QColor("#57c9b2") : QColor("#147b67");
+    const QColor download = chartAccentColor(palette().color(QPalette::Highlight), palette());
+    const QColor upload = chartAccentColor(resourceColor(ResourceKind::Gpu), palette());
     painter.setPen(download); painter.drawText(QRect(gap, 0, stackedLegend ? legendWidth : downloadWidth, height + gap), Qt::AlignVCenter, downloadLegend);
     const int uploadX = stackedLegend ? gap : gap + downloadWidth + gap * 2;
     painter.setPen(upload); painter.drawText(QRect(uploadX, stackedLegend ? height + gap : 0,
         width() - uploadX - gap, height + gap), Qt::AlignVCenter, uploadLegend);
     if (plot.width() < gap * 4 || plot.height() < gap * 4) return;
     painter.fillRect(plot, palette().color(QPalette::Base));
-    QColor grid = palette().color(QPalette::Mid); grid.setAlpha(100);
+    const QColor grid = chartGridColor(palette());
+    painter.setPen(QPen(grid, 1));
+    for (int i = 0; i <= 6; ++i) {
+        const qreal x = plot.left() + plot.width() * i / 6;
+        painter.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
+    }
+    const int labelStride = plot.height() / 4 >= height + gap ? 1
+        : plot.height() / 2 >= height + gap ? 2 : 4;
     for (int i = 0; i <= 4; ++i) {
         const qreal y = plot.top() + plot.height() * i / 4;
         painter.setPen(QPen(grid, 1)); painter.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y));
-        painter.setPen(palette().color(QPalette::WindowText));
-        painter.drawText(QRectF(plot.right() + gap, y - height / 2.0, axisWidth, height), Qt::AlignRight | Qt::AlignVCenter, ticks[i]);
+        if (i % labelStride == 0) {
+            painter.setPen(secondaryPaintText(palette()));
+            painter.drawText(QRectF(plot.right() + gap, y - height / 2.0, axisWidth, height), Qt::AlignLeft | Qt::AlignVCenter, ticks[i]);
+        }
     }
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(chartBorderColor(palette()), 1));
+    painter.drawRect(plot);
+    painter.setPen(secondaryPaintText(palette()));
     painter.drawText(QRectF(plot.left(), plot.bottom() + gap, plot.width(), height), Qt::AlignLeft, QStringLiteral("60 秒前"));
     painter.drawText(QRectF(plot.left(), plot.bottom() + gap, plot.width(), height), Qt::AlignRight, paused_ ? QStringLiteral("已暂停") : QStringLiteral("现在"));
     const auto points = series_.value(selectedInterface_).points;
     bool anyValue = false;
     painter.save(); painter.setClipRect(plot.adjusted(-1, -1, 1, 1));
     for (bool receiving : {true, false}) {
-        QPainterPath path; bool connected = false;
+        QVector<QPolygonF> segments;
+        bool connected = false;
         for (const auto &point : points) {
             const auto value = receiving ? point.download : point.upload;
             if (!value) { connected = false; continue; }
@@ -127,14 +145,31 @@ void NetworkHistoryChart::paintEvent(QPaintEvent *)
             const double seconds = point.timestamp.msecsTo(timestamp_) / 1000.0;
             const QPointF position(plot.right() - seconds / 60.0 * plot.width(),
                 plot.bottom() - qBound(0.0, *value / maximum, 1.0) * plot.height());
-            if (!connected || point.breakBefore) path.moveTo(position); else path.lineTo(position);
+            if (!connected || point.breakBefore) segments.append(QPolygonF());
+            segments.last().append(position);
             connected = true;
         }
-        painter.setPen(QPen(receiving ? download : upload, 2, receiving ? Qt::SolidLine : Qt::DashLine)); painter.drawPath(path);
+        const QColor color = receiving ? download : upload;
+        for (const auto &segment : segments) {
+            QPainterPath path;
+            path.moveTo(segment.first());
+            for (int i = 1; i < segment.size(); ++i) path.lineTo(segment[i]);
+            if (receiving) {
+                QPainterPath area = path;
+                area.lineTo(segment.last().x(), plot.bottom());
+                area.lineTo(segment.first().x(), plot.bottom());
+                area.closeSubpath();
+                painter.fillPath(area, chartFillColor(color, palette()));
+            }
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(color, 2, receiving ? Qt::SolidLine : Qt::DashLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.drawPath(path);
+            if (segment.size() == 1) { painter.setBrush(color); painter.drawEllipse(segment.first(), 2, 2); }
+        }
     }
     painter.restore();
     if (!anyValue) {
-        painter.setPen(palette().color(QPalette::PlaceholderText));
+        painter.setPen(secondaryPaintText(palette()));
         QTextOption option(Qt::AlignCenter); option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
         painter.drawText(plot.adjusted(gap, gap, -gap, -gap), QStringLiteral("等待连续采样\n未知速率显示为 —"), option);
     }

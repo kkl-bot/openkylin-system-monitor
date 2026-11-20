@@ -9,7 +9,7 @@ class ProcessTableModel final : public QAbstractTableModel {
     Q_OBJECT
 public:
     enum Column { Name, Pid, User, State, Cpu, Memory, MemoryPercent, Threads, ReadRate, WriteRate, ColumnCount };
-    enum Role { SortRole = Qt::UserRole + 1 };
+    enum Role { SortRole = Qt::UserRole + 1, UtilizationRole };
 
     explicit ProcessTableModel(QObject *parent = nullptr);
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;

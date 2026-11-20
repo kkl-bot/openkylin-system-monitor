@@ -1,8 +1,10 @@
 #include "ui/process_details_dialog.h"
 #include "ui/process_filter_model.h"
+#include "ui/process_heat_delegate.h"
 #include "ui/process_page.h"
 #include "ui/process_table_model.h"
 #include "ui/process_table_view.h"
+#include "ui/typography.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -11,18 +13,23 @@
 #include <QGuiApplication>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QScreen>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QStyleOptionViewItem>
+#include <QStyledItemDelegate>
 #include <QTableView>
 #include <QTimer>
 #include <QTextDocument>
 #include <QTextCursor>
 #include <QtTest>
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 using namespace monitor;
 using namespace monitor::ui;
@@ -57,6 +64,44 @@ qint64 selectedPid(ProcessPage &page)
     return rows.isEmpty() ? -1 : rows.first().sibling(rows.first().row(), ProcessTableModel::Pid).data().toLongLong();
 }
 QPushButton *button(ProcessPage &page, const char *name) { return page.findChild<QPushButton *>(QString::fromLatin1(name)); }
+QImage renderCell(QStyledItemDelegate &delegate, const QModelIndex &index, const QPalette &palette,
+                  bool selected = false, bool enabled = true, int pointSize = 0, bool active = true)
+{
+    QWidget canvas;
+    canvas.setPalette(palette);
+    if (pointSize > 0) { auto font = canvas.font(); font.setPointSize(pointSize); canvas.setFont(font); }
+    QImage image(220, 44, QImage::Format_ARGB32_Premultiplied);
+    image.fill(palette.color(QPalette::Base));
+    QStyleOptionViewItem option;
+    option.rect = image.rect(); option.widget = &canvas; option.palette = palette; option.font = canvas.font();
+    option.fontMetrics = QFontMetrics(canvas.font()); option.showDecorationSelected = true;
+    option.state = active ? QStyle::State_Active : QStyle::State_None;
+    if (enabled) option.state |= QStyle::State_Enabled;
+    if (selected) option.state |= QStyle::State_Selected;
+    QPainter painter(&image); delegate.paint(&painter, option, index); painter.end();
+    return image;
+}
+QRect darkTextBounds(const QImage &image, const QRect &area)
+{
+    QRect bounds;
+    const QRect clipped = area.intersected(image.rect());
+    for (int y = clipped.top(); y <= clipped.bottom(); ++y)
+        for (int x = clipped.left(); x <= clipped.right(); ++x) {
+            const auto color = image.pixelColor(x, y);
+            if (color.red() < 140 && color.green() < 140 && color.blue() < 140)
+                bounds = bounds.united(QRect(x, y, 1, 1));
+        }
+    return bounds;
+}
+double textContrast(const QColor &background, const QColor &foreground)
+{
+    const auto luminance = [](const QColor &color) {
+        const auto linear = [](double channel) { return channel <= 0.04045 ? channel / 12.92 : std::pow((channel + 0.055) / 1.055, 2.4); };
+        return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) + 0.0722 * linear(color.blueF());
+    };
+    const double a = luminance(background), b = luminance(foreground);
+    return (qMax(a, b) + 0.05) / (qMin(a, b) + 0.05);
+}
 } // namespace
 
 class ProcessUiTests final : public QObject {
@@ -64,6 +109,13 @@ class ProcessUiTests final : public QObject {
 private slots:
     void initTestCase();
     void sortsNumbersAndUnavailableMetrics();
+    void headersAlignWithTheirData();
+    void heatUsesOnlyMeasuredCpuAndMemoryRatios();
+    void heatPreservesDarkLightAndSelectionReadability();
+    void cellTextHasRealMargins();
+    void selectedCellsUseMatchingPaletteGroup();
+    void sortedHeaderKeepsTextClearOfTheArrow();
+    void compactCommandsLeaveRoomForTheTable();
     void filtersNamePidUserAndOwner();
     void preservesIdentityAcrossRefreshAndClearsPidReuse();
     void disablesProtectedAndDisappearingProcesses();
@@ -92,6 +144,215 @@ void ProcessUiTests::sortsNumbersAndUnavailableMetrics()
     QCOMPARE(proxy.index(0, ProcessTableModel::Pid).data().toLongLong(), 902001LL);
     QCOMPARE(proxy.index(1, ProcessTableModel::Pid).data().toLongLong(), 902003LL);
     QCOMPARE(proxy.index(2, ProcessTableModel::Pid).data().toLongLong(), 902002LL);
+}
+void ProcessUiTests::headersAlignWithTheirData()
+{
+    ProcessTableModel model; model.acceptSnapshot(snapshot());
+    for (int column = 0; column < ProcessTableModel::ColumnCount; ++column) {
+        const int alignment = model.headerData(column, Qt::Horizontal, Qt::TextAlignmentRole).toInt();
+        QCOMPARE(alignment, model.index(0, column).data(Qt::TextAlignmentRole).toInt());
+        QVERIFY(alignment & Qt::AlignVCenter);
+        QVERIFY(alignment & (column == ProcessTableModel::Pid || column >= ProcessTableModel::Cpu ? Qt::AlignRight : Qt::AlignLeft));
+    }
+}
+void ProcessUiTests::heatUsesOnlyMeasuredCpuAndMemoryRatios()
+{
+    ProcessTableModel model;
+    auto sample = snapshot();
+    sample.processes[0].cpuPercent = 37.5;
+    sample.processes[0].memoryPercent = 12.5;
+    sample.processes[1].cpuPercent = 0;
+    sample.processes[1].memoryPercent.reset();
+    sample.processes[1].residentBytes = std::numeric_limits<quint64>::max();
+    sample.processes[2].cpuPercent.reset();
+    model.acceptSnapshot(sample);
+    QCOMPARE(model.index(0, ProcessTableModel::Cpu).data(ProcessTableModel::UtilizationRole).toDouble(), 0.375);
+    QCOMPARE(model.index(0, ProcessTableModel::Memory).data(ProcessTableModel::UtilizationRole).toDouble(), 0.125);
+    QCOMPARE(model.index(0, ProcessTableModel::MemoryPercent).data(ProcessTableModel::UtilizationRole).toDouble(), 0.125);
+    QVERIFY(model.index(1, ProcessTableModel::Cpu).data(ProcessTableModel::UtilizationRole).isValid());
+    QCOMPARE(model.index(1, ProcessTableModel::Cpu).data(ProcessTableModel::UtilizationRole).toDouble(), 0.0);
+    QVERIFY(!model.index(1, ProcessTableModel::Memory).data(ProcessTableModel::UtilizationRole).isValid());
+    QVERIFY(!model.index(2, ProcessTableModel::Cpu).data(ProcessTableModel::UtilizationRole).isValid());
+    QVERIFY(!model.index(0, ProcessTableModel::ReadRate).data(ProcessTableModel::UtilizationRole).isValid());
+    sample.processes[0].cpuPercent = std::numeric_limits<double>::infinity();
+    sample.processes[1].cpuPercent = -1;
+    sample.processes[2].cpuPercent = 101;
+    model.acceptSnapshot(sample);
+    for (int row = 0; row < model.rowCount(); ++row)
+        QVERIFY(!model.index(row, ProcessTableModel::Cpu).data(ProcessTableModel::UtilizationRole).isValid());
+}
+void ProcessUiTests::heatPreservesDarkLightAndSelectionReadability()
+{
+    ProcessTableModel model;
+    ProcessHeatDelegate heat;
+    QStyledItemDelegate normal;
+    auto sample = snapshot(); sample.processes[0].cpuPercent = 80; sample.processes[1].cpuPercent = 0;
+    sample.processes[2].cpuPercent.reset(); model.acceptSnapshot(sample);
+    for (bool dark : {false, true}) {
+        QPalette palette;
+        palette.setColor(QPalette::Base, dark ? QColor("#202020") : QColor("#ffffff"));
+        palette.setColor(QPalette::AlternateBase, dark ? QColor("#282828") : QColor("#f6f6f6"));
+        palette.setColor(QPalette::Text, dark ? QColor("#eeeeee") : QColor("#171717"));
+        palette.setColor(QPalette::Highlight, QColor("#195da8"));
+        palette.setColor(QPalette::HighlightedText, QColor(Qt::white));
+        const auto busy = model.index(0, ProcessTableModel::Cpu);
+        const auto heatImage = renderCell(heat, busy, palette);
+        const auto normalImage = renderCell(normal, busy, palette);
+        const auto background = heatImage.pixelColor(8, 22);
+        QVERIFY(background != normalImage.pixelColor(8, 22));
+        QVERIFY(background.blue() > background.red());
+        QVERIFY(textContrast(background, palette.color(QPalette::Text)) >= 4.5);
+        // Selection uses an opaque matching palette pair across the full cell;
+        // disabled unselected cells retain their native background.
+        for (const QPoint edge : {QPoint(0, 22), QPoint(219, 22)}) {
+            QCOMPARE(renderCell(heat, busy, palette, true).pixelColor(edge), palette.color(QPalette::Active, QPalette::Highlight));
+            QCOMPARE(renderCell(heat, busy, palette, false, false).pixelColor(edge), renderCell(normal, busy, palette, false, false).pixelColor(edge));
+        }
+        for (int row : {1, 2}) {
+            const auto index = model.index(row, ProcessTableModel::Cpu);
+            for (const QPoint edge : {QPoint(0, 22), QPoint(219, 22)})
+                QCOMPARE(renderCell(heat, index, palette).pixelColor(edge), renderCell(normal, index, palette).pixelColor(edge));
+        }
+        sample.processes[0].cpuPercent = 1; model.acceptSnapshot(sample);
+        const auto low = renderCell(heat, model.index(0, ProcessTableModel::Cpu), palette).pixelColor(8, 22);
+        QVERIFY(background != low);
+        QVERIFY(textContrast(low, palette.color(QPalette::Text)) >= 4.5);
+        sample.processes[0].cpuPercent = 80; model.acceptSnapshot(sample);
+    }
+}
+void ProcessUiTests::cellTextHasRealMargins()
+{
+    ProcessTableModel model; model.acceptSnapshot(snapshot());
+    ProcessHeatDelegate delegate;
+    QPalette palette;
+    palette.setColor(QPalette::Base, Qt::white); palette.setColor(QPalette::Text, Qt::black);
+    palette.setColor(QPalette::Highlight, QColor("#195da8")); palette.setColor(QPalette::HighlightedText, Qt::white);
+    for (int pointSize : {12, 20}) {
+        const auto pid = renderCell(delegate, model.index(0, ProcessTableModel::Pid), palette, false, true, pointSize);
+        const auto user = renderCell(delegate, model.index(0, ProcessTableModel::User), palette, false, true, pointSize);
+        const QRect pidText = darkTextBounds(pid, pid.rect()), userText = darkTextBounds(user, user.rect());
+        QVERIFY(!pidText.isEmpty()); QVERIFY(!userText.isEmpty());
+        QVERIFY(pidText.right() <= pid.width() - 11);
+        QVERIFY(pidText.right() >= pid.width() - 22);
+        QVERIFY(userText.left() >= 10); QVERIFY(userText.left() <= 20);
+        const auto selected = renderCell(delegate, model.index(0, ProcessTableModel::Pid), palette, true, true, pointSize);
+        QCOMPARE(selected.pixelColor(0, 22), palette.color(QPalette::Active, QPalette::Highlight));
+        QCOMPARE(selected.pixelColor(219, 22), palette.color(QPalette::Active, QPalette::Highlight));
+    }
+}
+void ProcessUiTests::selectedCellsUseMatchingPaletteGroup()
+{
+    ProcessTableModel model; model.acceptSnapshot(snapshot());
+    ProcessHeatDelegate delegate;
+    QPalette palette;
+    palette.setColor(QPalette::Active, QPalette::Highlight, QColor("#4557b4"));
+    palette.setColor(QPalette::Inactive, QPalette::Highlight, QColor("#405272"));
+    palette.setColor(QPalette::Disabled, QPalette::Highlight, QColor("#5a6170"));
+    palette.setColor(QPalette::HighlightedText, Qt::white);
+    for (auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+        for (auto column : {ProcessTableModel::Name, ProcessTableModel::Cpu, ProcessTableModel::User}) {
+            const auto image = renderCell(delegate, model.index(0, column), palette, true,
+                group != QPalette::Disabled, 12, group == QPalette::Active);
+            const QColor background = palette.color(group, QPalette::Highlight);
+            QCOMPARE(image.pixelColor(0, 22), background);
+            QCOMPARE(image.pixelColor(219, 22), background);
+            QCOMPARE(image.pixelColor(110, 2), background);
+            QVERIFY(textContrast(background, palette.color(group, QPalette::HighlightedText)) >= 4.5);
+            bool foregroundFound = false;
+            for (int y = 6; y < image.height() - 6; ++y)
+                for (int x = 10; x < image.width() - 10; ++x) {
+                    const auto ink = image.pixelColor(x, y);
+                    foregroundFound = foregroundFound || (ink.red() > 230 && ink.green() > 230 && ink.blue() > 230);
+                }
+            QVERIFY(foregroundFound);
+        }
+    }
+}
+void ProcessUiTests::sortedHeaderKeepsTextClearOfTheArrow()
+{
+    ProcessPage page; page.resize(1000, 780); page.acceptSnapshot(snapshot()); page.show();
+    auto *view = table(page); auto *header = view->horizontalHeader();
+    auto palette = header->palette();
+    palette.setColor(QPalette::Button, Qt::white); palette.setColor(QPalette::Window, Qt::white);
+    palette.setColor(QPalette::ButtonText, Qt::black); palette.setColor(QPalette::WindowText, Qt::black);
+    header->setPalette(palette);
+    header->setStyleSheet(QStringLiteral("QHeaderView::section { background: white; color: black; border: none; padding: 0; }"));
+    for (int pointSize : {12, 20}) {
+        auto font = header->font(); font.setPointSize(pointSize); header->setFont(font);
+        header->resizeSection(ProcessTableModel::Cpu, 170);
+        for (const auto direction : {Qt::LeftToRight, Qt::RightToLeft}) {
+        page.setLayoutDirection(direction);
+        QImage ascendingArrow;
+        for (const auto order : {Qt::AscendingOrder, Qt::DescendingOrder}) {
+            view->sortByColumn(ProcessTableModel::Cpu, order); QTest::qWait(20);
+            const QRect section(header->sectionViewportPosition(ProcessTableModel::Cpu), 0,
+                header->sectionSize(ProcessTableModel::Cpu), header->viewport()->height());
+            // Render the whole viewport first: partial grabs can change the
+            // header's paint/clip region on offscreen platform plugins.
+            const auto viewportImage = header->viewport()->grab().toImage().scaled(header->viewport()->size());
+            const auto image = viewportImage.copy(section);
+            const bool rtl = direction == Qt::RightToLeft;
+            const auto allInk = darkTextBounds(image, image.rect()); QVERIFY(!allInk.isEmpty());
+            // Detect the outermost continuous ink cluster, then check actual
+            // text/arrow separation without trusting any style arrow rectangle.
+            int split = rtl ? allInk.left() : allInk.right();
+            const int step = rtl ? 1 : -1;
+            while (split >= 0 && split < image.width()
+                && !darkTextBounds(image, QRect(split, 0, 1, image.height())).isEmpty()) split += step;
+            const QRect arrowRegion = rtl ? QRect(0, 0, split, image.height())
+                : QRect(split + 1, 0, image.width() - split - 1, image.height());
+            const QRect textRegion = rtl ? QRect(split, 0, image.width() - split, image.height())
+                : QRect(0, 0, split + 1, image.height());
+            const auto arrow = darkTextBounds(image, arrowRegion), text = darkTextBounds(image, textRegion);
+            QVERIFY(!arrow.isEmpty()); QVERIFY(!text.isEmpty());
+            QVERIFY(arrow.width() >= 8); QVERIFY(arrow.width() <= header->fontMetrics().height() + 2);
+            QVERIFY(arrow.height() < header->fontMetrics().height());
+            QVERIFY(text.width() >= header->fontMetrics().horizontalAdvance(QStringLiteral("CP")));
+            const int gap = rtl ? text.left() - arrow.right() - 1 : arrow.left() - text.right() - 1;
+            QVERIFY(gap >= 6); QVERIFY(gap <= header->fontMetrics().height());
+            const auto center = darkTextBounds(image, QRect(arrow.center().x() - 1, arrow.top(), 3, arrow.height()));
+            const auto edge = darkTextBounds(image, QRect(arrow.left(), arrow.top(), 2, arrow.height()));
+            QVERIFY(!center.isEmpty()); QVERIFY(!edge.isEmpty());
+            if (order == Qt::AscendingOrder) {
+                QVERIFY(center.center().y() < edge.center().y());
+                ascendingArrow = image.copy(arrow);
+            } else {
+                QVERIFY(center.center().y() > edge.center().y());
+                QVERIFY(ascendingArrow != image.copy(arrow));
+            }
+        }
+        }
+    }
+}
+void ProcessUiTests::compactCommandsLeaveRoomForTheTable()
+{
+    ProcessPage page;
+    auto font = page.font(); font.setPointSize(12); page.setFont(font);
+    applyTypography(&page);
+    page.resize(1000, 780); page.acceptSnapshot(snapshot()); page.show();
+    auto *view = table(page);
+    auto *title = page.findChild<QLabel *>(QStringLiteral("pageTitle"));
+    QVERIFY(title);
+    QCOMPARE(title->font(), typographyFont(page.font(), TextRole::Title));
+    QCOMPARE(view->horizontalHeader()->font(), typographyFont(page.font(), TextRole::Section));
+    QCOMPARE(button(page, "processTerminate")->property("actionRole").toString(), QStringLiteral("primary"));
+    QCOMPARE(button(page, "processForceTerminate")->property("actionRole").toString(), QStringLiteral("danger"));
+    QTRY_VERIFY(view->height() > page.height() * 0.60);
+    QCOMPARE(view->horizontalHeader()->logicalIndex(0), int(ProcessTableModel::Name));
+    QCOMPARE(view->horizontalHeader()->logicalIndex(1), int(ProcessTableModel::Cpu));
+    QCOMPARE(view->horizontalHeader()->logicalIndex(2), int(ProcessTableModel::Memory));
+    auto *search = page.findChild<QLineEdit *>(QStringLiteral("processSearch"));
+    QVERIFY(search);
+    const int tableTop = view->mapTo(&page, QPoint()).y();
+    const QList<QWidget *> controls = {search, button(page, "processTerminate"), button(page, "processDetails"),
+        button(page, "processForceTerminate"), button(page, "processRefresh"), button(page, "processPause"),
+        page.findChild<QComboBox *>(QStringLiteral("processInterval")), page.findChild<QCheckBox *>(QStringLiteral("processOwnOnly"))};
+    for (const auto *control : controls) {
+        QVERIFY(control);
+        QVERIFY(control->isVisible());
+        QVERIFY(control->mapTo(&page, control->rect().bottomLeft()).y() < tableTop);
+    }
+    QVERIFY(dynamic_cast<ProcessHeatDelegate *>(view->itemDelegate()));
 }
 void ProcessUiTests::filtersNamePidUserAndOwner()
 {
@@ -140,8 +401,10 @@ void ProcessUiTests::controlsAndHeaderState()
     QCOMPARE(interval.count(), 1); QCOMPARE(interval.first().first().toInt(), 5000);
     button(page, "processRefresh")->click(); QCOMPARE(refreshed.count(), 1);
     table(page)->setColumnWidth(ProcessTableModel::Name, 222); table(page)->sortByColumn(ProcessTableModel::Memory, Qt::AscendingOrder);
+    table(page)->horizontalHeader()->moveSection(table(page)->horizontalHeader()->visualIndex(ProcessTableModel::Pid), 1);
     const auto saved = page.headerState(); ProcessPage restored; restored.restoreHeaderState(saved); restored.acceptSnapshot(snapshot());
     QCOMPARE(table(restored)->columnWidth(ProcessTableModel::Name), 222);
+    QCOMPARE(table(restored)->horizontalHeader()->logicalIndex(1), int(ProcessTableModel::Pid));
     QCOMPARE(table(restored)->horizontalHeader()->sortIndicatorSection(), int(ProcessTableModel::Memory));
     QCOMPARE(table(restored)->horizontalHeader()->sortIndicatorOrder(), Qt::AscendingOrder);
     QCOMPARE(table(restored)->model()->index(0, ProcessTableModel::Pid).data().toLongLong(), 902001LL);
@@ -294,8 +557,9 @@ void ProcessUiTests::narrowPageKeepsControlsReachable()
     scroll->ensureWidgetVisible(button(page, "processPause"));
     QTRY_VERIFY(scroll->viewport()->rect().contains(button(page, "processPause")->mapTo(scroll->viewport(), button(page, "processPause")->rect().center())));
     page.resize(1600, 720);
+    auto *title = page.findChild<QLabel *>(QStringLiteral("pageTitle")); QVERIFY(title);
     QTRY_VERIFY(qAbs(search->mapTo(scroll->widget(), search->rect().center()).y()
-                    - own->mapTo(scroll->widget(), own->rect().center()).y()) <= search->height() / 2);
+                    - title->mapTo(scroll->widget(), title->rect().center()).y()) <= search->height() / 2);
 }
 void ProcessUiTests::detailsFitScreenAndWrapLongCommands()
 {

@@ -6,6 +6,11 @@
 
 namespace monitor::ui {
 namespace {
+int columnAlignment(int column)
+{
+    return static_cast<int>((column == ProcessTableModel::Pid || column >= ProcessTableModel::Cpu
+        ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter);
+}
 QVariant optionalNumber(const std::optional<double> &value)
 {
     return value && std::isfinite(*value) ? QVariant(*value) : QVariant();
@@ -37,6 +42,12 @@ QVariant ProcessTableModel::data(const QModelIndex &index, int role) const
 {
     const auto *process = processAt(index.row());
     if (!index.isValid() || !process || index.column() < 0 || index.column() >= ColumnCount) return {};
+    if (role == UtilizationRole) {
+        const auto value = index.column() == Cpu ? process->cpuPercent
+            : (index.column() == Memory || index.column() == MemoryPercent) ? process->memoryPercent : std::nullopt;
+        if (!value || !std::isfinite(*value) || *value < 0 || *value > 100) return {};
+        return *value / 100.0;
+    }
     if (role == Qt::ToolTipRole) {
         QString fullText;
         if (index.column() == Name) fullText = process->name;
@@ -45,7 +56,7 @@ QVariant ProcessTableModel::data(const QModelIndex &index, int role) const
         return QStringLiteral("<qt>") + fullText.toHtmlEscaped().replace('\n', QStringLiteral("<br/>")) + QStringLiteral("</qt>");
     }
     if (role == Qt::TextAlignmentRole)
-        return static_cast<int>((index.column() == Pid || index.column() >= Cpu ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter);
+        return columnAlignment(index.column());
     if (role != Qt::DisplayRole && role != SortRole) return {};
     const bool sorting = role == SortRole;
     switch (index.column()) {
@@ -65,9 +76,11 @@ QVariant ProcessTableModel::data(const QModelIndex &index, int role) const
 QVariant ProcessTableModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
     if (orientation != Qt::Horizontal) return {};
+    if (section < 0 || section >= ColumnCount) return {};
+    if (role == Qt::TextAlignmentRole) return columnAlignment(section);
     if (role == Qt::ToolTipRole) {
-        if (section == Cpu) return QStringLiteral("占整机总 CPU 容量的比例；多核合计最高为 100%。首次采样显示 —。");
-        if (section == Memory) return QStringLiteral("进程当前驻留内存（RSS）；共享内存可能被多个进程计入。");
+        if (section == Cpu) return QStringLiteral("占整机总 CPU 容量的比例；多核合计最高为 100%。首次采样显示 —。底色随该进程实际占比加深。");
+        if (section == Memory || section == MemoryPercent) return QStringLiteral("进程当前驻留内存（RSS）；共享内存可能被多个进程计入。底色取该进程的实际内存占比，不代表所有进程的合计。");
         if (section == ReadRate || section == WriteRate) return QStringLiteral("进程存储 I/O 速率；权限不足或缺少连续样本时显示 —。");
     }
     if (role != Qt::DisplayRole) return {};

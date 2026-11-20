@@ -3,6 +3,7 @@
 #include "ui/network_page.h"
 #include <QApplication>
 #include <QDir>
+#include <QEventLoop>
 #include <QIcon>
 #include <QMenu>
 #include <QScreen>
@@ -39,6 +40,8 @@ ApplicationController::ApplicationController(QObject *parent)
     auto *shortcut = new QShortcut(QKeySequence("Ctrl+M"), &detail_);
     connect(shortcut, &QShortcut::activated, this, &ApplicationController::showMini);
     detail_.restoreGeometry(settings_.value("detailGeometry").toByteArray());
+    detail_.setNavigationCollapsed(settings_.value("navigationCollapsed", false).toBool());
+    detail_.selectResource(settings_.value("performanceResource", "cpu").toString());
     detail_.processPage()->restoreHeaderState(settings_.value("processHeader").toByteArray());
     detail_.networkPage()->setSelectedInterface(settings_.value("networkInterface").toString());
     const QString page = settings_.value("detailPage", "processes").toString();
@@ -96,6 +99,8 @@ void ApplicationController::saveSettings()
 {
     if (!saveState_) return;
     settings_.setValue("detailGeometry", detail_.saveGeometry());
+    settings_.setValue("navigationCollapsed", detail_.navigationCollapsed());
+    settings_.setValue("performanceResource", detail_.selectedResource());
     settings_.setValue("detailPage", detail_.showingNetwork() ? "network" : detail_.showingProcesses() ? "processes" : "performance");
     settings_.setValue("networkInterface", detail_.networkPage()->selectedInterface());
     settings_.setValue("processHeader", detail_.processPage()->headerState());
@@ -106,17 +111,23 @@ bool ApplicationController::savePreviews(const QString &directory)
 {
     saveState_ = false;
     if (!QDir().mkpath(directory)) return false;
-    if (detail_.showingNetwork())
-        return detail_.grab().save(QDir(directory).filePath("network.png"));
+    const auto save = [&directory](QWidget &widget, const QString &filename) {
+        // The resource picker and font-dependent layouts settle on the next event turn.
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::LayoutRequest);
+        return widget.grab().save(QDir(directory).filePath(filename));
+    };
+    if (detail_.showingNetwork()) return save(detail_, "network.png");
     bool ok = true;
     detail_.showProcesses(); detail_.show();
-    ok = detail_.grab().save(QDir(directory).filePath("processes.png")) && ok;
-    for (const auto &sample : model_.snapshot().resources) {
+    ok = save(detail_, "processes.png") && ok;
+    const auto resources = model_.snapshot().resources;
+    for (const auto &sample : resources) {
         detail_.selectResource(sample.id); detail_.show();
         const auto name = sample.kind == ResourceKind::Cpu ? "cpu" : sample.kind == ResourceKind::Gpu ? "gpu" : "memory";
-        ok = detail_.grab().save(QDir(directory).filePath(QString::fromLatin1(name) + ".png")) && ok;
+        ok = save(detail_, QString::fromLatin1(name) + ".png") && ok;
     }
-    mini_.show(); ok = mini_.grab().save(QDir(directory).filePath("mini.png")) && ok;
+    mini_.show(); ok = save(mini_, "mini.png") && ok;
     return ok;
 }
 } // namespace monitor

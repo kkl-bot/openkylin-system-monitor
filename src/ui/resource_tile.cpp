@@ -1,72 +1,139 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "ui/resource_tile.h"
+#include "ui/paint_palette.h"
+#include "ui/resource_sparkline.h"
 #include "ui/theme.h"
 #include "ui/typography.h"
 #include <QEvent>
 #include <QFontMetrics>
 #include <QPainter>
 #include <QTextDocument>
+#include <QTextLayout>
+#include <QtMath>
 
 namespace monitor::ui {
 namespace {
+
+struct TileContent {
+    QString title;
+    QString summary;
+    QString tooltip;
+};
+
+QString capacitySummary(const ResourceSample &sample)
+{
+    QString used = sample.usedBytes ? formatBytes(*sample.usedBytes) : QStringLiteral("—");
+    const QString total = sample.totalBytes ? formatBytes(*sample.totalBytes) : QStringLiteral("—");
+    const int unit = used.lastIndexOf(QLatin1Char(' '));
+    if (unit >= 0 && total.endsWith(used.mid(unit)))
+        used.truncate(unit); // One shared unit keeps a real used/total pair compact.
+    return used + QStringLiteral(" / ") + total;
+}
+
+TileContent contentFor(const MonitorModel &model, const QString &id)
+{
+    const auto *sample = model.resource(id);
+    if (!sample)
+        return {id, QStringLiteral("等待采样"), QStringLiteral("等待资源采样")};
+    TileContent content;
+    content.title = model.resourceTitle(*sample);
+    const QString utilization = formatMetric(sample->utilization, QStringLiteral("%"));
+    if (sample->kind == ResourceKind::Memory && (sample->usedBytes || sample->totalBytes)) {
+        content.summary = capacitySummary(*sample) + QStringLiteral(" (") + utilization + QLatin1Char(')');
+    } else {
+        content.summary = utilization;
+        if (sample->kind == ResourceKind::Cpu) {
+            const QString frequency = sample->details.value(QStringLiteral("平均频率")).simplified();
+            bool measured = false;
+            const double value = frequency.section(QLatin1Char(' '), 0, 0).toDouble(&measured);
+            if (measured && qIsFinite(value) && value > 0
+                && (frequency.endsWith(QStringLiteral(" GHz")) || frequency.endsWith(QStringLiteral(" MHz"))))
+                content.summary += QStringLiteral(" · ") + frequency;
+        }
+        if (sample->temperature.value)
+            content.summary += QStringLiteral(" · ") + formatMetric(sample->temperature, QStringLiteral(" °C"));
+    }
+    QStringList information{content.title, sample->name, content.summary,
+        QStringLiteral("利用率：") + utilization,
+        QStringLiteral("温度：") + formatMetric(sample->temperature, QStringLiteral(" °C")),
+        QStringLiteral("小图显示最近 60 秒利用率；无读数或采样间断时折线断开。")};
+    if (!sample->utilization.value && !sample->utilization.reason.isEmpty())
+        information.append(sample->utilization.reason);
+    if (!sample->temperature.value && !sample->temperature.reason.isEmpty())
+        information.append(sample->temperature.reason);
+    content.tooltip = information.join(QLatin1Char('\n'));
+    return content;
+}
+
+qreal layoutSummary(QTextLayout &text, qreal width)
+{
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    text.setTextOption(option);
+    text.beginLayout();
+    qreal height = 0;
+    for (;;) {
+        QTextLine line = text.createLine();
+        if (!line.isValid()) break;
+        line.setLineWidth(qMax<qreal>(1, width));
+        line.setPosition(QPointF(0, height));
+        height += line.height();
+    }
+    text.endLayout();
+    return height;
+}
+
 struct TileLayout {
     QFont titleFont;
-    QFont detailFont;
-    QFont valueFont;
-    QRect title;
-    QRect name;
-    QRect usage;
-    QRect temperature;
-    QRect marker;
+    QFont summaryFont;
+    QRectF sparkline;
+    QRectF title;
+    QRectF summary;
     int height = 0;
     int preferredWidth = 0;
     int minimumWidth = 0;
 };
 
-TileLayout measureTile(const QFont &font, const QPaintDevice *device, int width,
-                       const ResourceSample *sample)
+TileLayout measureTile(const QFont &font, const QPaintDevice *device, int width, const TileContent &content)
 {
     TileLayout layout;
     layout.titleFont = typographyFont(font, TextRole::Section);
-    layout.detailFont = typographyFont(font, TextRole::Body);
-    layout.valueFont = typographyFont(font, TextRole::Metric);
-    const QFontMetrics baseMetrics(font, device);
+    layout.summaryFont = typographyFont(font, TextRole::Body);
     const QFontMetrics titleMetrics(layout.titleFont, device);
-    const QFontMetrics detailMetrics(layout.detailFont, device);
-    const QFontMetrics valueMetrics(layout.valueFont, device);
-    const int padding = qMax(8, qRound(baseMetrics.height() * 0.65));
-    const int gap = qMax(4, baseMetrics.height() / 4);
-    const int markerWidth = qMax(3, baseMetrics.height() / 5);
-    const int left = padding + markerWidth + gap * 2;
-    const QString usage = sample ? formatMetric(sample->utilization, "%") : QStringLiteral("—");
-    const QString temperature = sample ? formatMetric(sample->temperature, " °C") : QStringLiteral("—");
-    // Reserve normal full-scale values so each new sample does not change the row layout.
-    const int usageWidth = qMax(valueMetrics.horizontalAdvance(usage), valueMetrics.horizontalAdvance("100%")) + 2;
-    const int temperatureWidth = qMax(detailMetrics.horizontalAdvance(temperature), detailMetrics.horizontalAdvance("−120 °C")) + 2;
-    const int valueGap = gap * 2;
-    const int titleWidth = titleMetrics.horizontalAdvance(sample ? resourceLabel(sample->kind) : QStringLiteral("CPU"));
-    layout.minimumWidth = left + qMax(titleWidth, qMax(usageWidth, temperatureWidth)) + padding;
-    layout.preferredWidth = left + qMax(baseMetrics.horizontalAdvance('0') * 13, usageWidth + valueGap + temperatureWidth) + padding;
-    const int available = qMax(0, width - left - padding);
-    int y = padding;
-    layout.title = QRect(left, y, available, titleMetrics.height());
-    layout.marker = QRect(padding, y + titleMetrics.height() / 6, markerWidth, qMax(1, titleMetrics.height() * 2 / 3));
-    y += titleMetrics.height() + gap;
-    layout.name = QRect(left, y, available, detailMetrics.height());
-    y += detailMetrics.height() + gap * 2;
-    if (available >= usageWidth + valueGap + temperatureWidth) {
-        const int rowHeight = qMax(valueMetrics.height(), detailMetrics.height());
-        layout.usage = QRect(left, y, available - temperatureWidth - valueGap, rowHeight);
-        layout.temperature = QRect(width - padding - temperatureWidth, y, temperatureWidth, rowHeight);
-        y += rowHeight;
-    } else {
-        layout.usage = QRect(left, y, available, valueMetrics.height());
-        y += valueMetrics.height() + gap;
-        layout.temperature = QRect(left, y, available, detailMetrics.height());
-        y += detailMetrics.height();
-    }
-    layout.height = y + padding;
+    const QFontMetrics metrics(layout.summaryFont, device);
+    const int padding = qMax(8, metrics.height() / 3);
+    const int gap = qMax(8, metrics.height() / 3);
+    const int lineGap = qMax(2, metrics.height() / 10);
+    const int preferredGraphWidth = qBound(52, metrics.height() * 2 + 8, 68);
+    const int minimumGraphWidth = 44;
+    const int graphHeight = qMax(38, qRound(metrics.height() * 1.65));
+    const int minimumTextWidth = qMax(titleMetrics.horizontalAdvance(content.title),
+                                      metrics.horizontalAdvance(QStringLiteral("100%"))) + 2;
+    layout.minimumWidth = padding * 2 + minimumGraphWidth + gap + minimumTextWidth;
+    layout.preferredWidth = qMax(225, padding * 2 + preferredGraphWidth + gap
+        + qMax(minimumTextWidth, metrics.horizontalAdvance(QStringLiteral("8.0 / 16.0 GiB"))));
+
+    const int available = qMax(1, width - padding * 2);
+    int graphWidth = preferredGraphWidth;
+    if (available < graphWidth + gap + minimumTextWidth)
+        graphWidth = minimumGraphWidth;
+    if (available < graphWidth + gap + minimumTextWidth)
+        graphWidth = 0; // A forced extra-narrow row keeps readable text, without shrinking it.
+    const int textLeft = padding + (graphWidth ? graphWidth + gap : 0);
+    const int textWidth = qMax(1, width - textLeft - padding);
+    QTextLayout summary(content.summary, layout.summaryFont, device);
+    const int summaryHeight = qCeil(layoutSummary(summary, textWidth));
+    const int textHeight = titleMetrics.height() + lineGap + summaryHeight;
+    const int bodyHeight = qMax(textHeight, graphWidth ? graphHeight : 0);
+    const qreal textTop = padding + (bodyHeight - textHeight) / 2.0;
+    layout.title = QRectF(textLeft, textTop, textWidth, titleMetrics.height());
+    layout.summary = QRectF(textLeft, textTop + titleMetrics.height() + lineGap, textWidth, summaryHeight);
+    if (graphWidth)
+        layout.sparkline = QRectF(padding, padding + (bodyHeight - graphHeight) / 2.0, graphWidth, graphHeight);
+    layout.height = padding * 2 + bodyHeight;
     return layout;
 }
+
 } // namespace
 
 ResourceTile::ResourceTile(MonitorModel *model, const QString &id, QWidget *parent)
@@ -74,6 +141,8 @@ ResourceTile::ResourceTile(MonitorModel *model, const QString &id, QWidget *pare
 {
     setCheckable(true);
     setAutoExclusive(true);
+    setAutoFillBackground(false);
+    setAttribute(Qt::WA_StyledBackground, false);
     QSizePolicy policy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     policy.setHeightForWidth(true);
     setSizePolicy(policy);
@@ -82,40 +151,39 @@ ResourceTile::ResourceTile(MonitorModel *model, const QString &id, QWidget *pare
     connect(model, &MonitorModel::changed, this, &ResourceTile::refresh);
     refresh();
 }
+
 QString ResourceTile::resourceId() const { return id_; }
+
 QSize ResourceTile::sizeHint() const
 {
-    const auto *sample = model_->resource(id_);
-    const auto measured = measureTile(font(), this, width(), sample);
-    return {measured.preferredWidth, heightForWidth(measured.preferredWidth)};
+    const auto content = contentFor(*model_, id_);
+    const auto layout = measureTile(font(), this, width(), content);
+    return {layout.preferredWidth, heightForWidth(layout.preferredWidth)};
 }
+
 QSize ResourceTile::minimumSizeHint() const
 {
-    const auto measured = measureTile(font(), this, width(), model_->resource(id_));
-    return {measured.minimumWidth, heightForWidth(measured.preferredWidth)};
+    const auto content = contentFor(*model_, id_);
+    const auto layout = measureTile(font(), this, width(), content);
+    return {layout.minimumWidth, heightForWidth(layout.preferredWidth)};
 }
+
 int ResourceTile::heightForWidth(int width) const
 {
-    return measureTile(font(), this, width, model_->resource(id_)).height;
+    return measureTile(font(), this, width, contentFor(*model_, id_)).height;
 }
+
 void ResourceTile::refresh()
 {
+    const auto content = contentFor(*model_, id_);
     const auto *sample = model_->resource(id_);
-    if (sample) {
-        const QString values = QStringLiteral("利用率：%1；温度：%2")
-            .arg(formatMetric(sample->utilization, "%"), formatMetric(sample->temperature, " °C"));
-        setAccessibleName(resourceLabel(sample->kind) + ' ' + sample->name);
-        setAccessibleDescription(values);
-        // Tooltips auto-detect rich text. Escape device-provided names to display them literally.
-        setToolTip(Qt::convertFromPlainText(resourceLabel(sample->kind) + '\n' + sample->name + '\n' + values));
-    } else {
-        setAccessibleName(id_);
-        setAccessibleDescription({});
-        setToolTip({});
-    }
+    setAccessibleName(content.title + (sample ? QLatin1Char(' ') + sample->name : QString()));
+    setAccessibleDescription(content.tooltip);
+    setToolTip(Qt::convertFromPlainText(content.tooltip));
     updateGeometry();
     update();
 }
+
 void ResourceTile::changeEvent(QEvent *event)
 {
     QPushButton::changeEvent(event);
@@ -124,32 +192,63 @@ void ResourceTile::changeEvent(QEvent *event)
         updateGeometry();
         update();
     }
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange) update();
 }
+
+bool ResourceTile::event(QEvent *event)
+{
+    const bool handled = QPushButton::event(event);
+    if (event->type() == QEvent::Polish || event->type() == QEvent::StyleChange) {
+        // The row paints its own states; generic QPushButton styling must not fill it first.
+        setAutoFillBackground(false);
+        setAttribute(Qt::WA_StyledBackground, false);
+        setAttribute(Qt::WA_OpaquePaintEvent, false);
+    }
+    return handled;
+}
+
 void ResourceTile::paintEvent(QPaintEvent *)
 {
+    const auto content = contentFor(*model_, id_);
+    const auto layout = measureTile(font(), this, width(), content);
     const auto *sample = model_->resource(id_);
-    if (!sample) return;
-    const auto layout = measureTile(font(), this, width(), sample);
-    QPainter p(this); p.setRenderHint(QPainter::Antialiasing);
-    const auto color = resourceColor(sample->kind);
-    QColor selected = palette().color(QPalette::Highlight); selected.setAlpha(40);
-    p.setPen(isChecked() ? QPen(palette().color(QPalette::Highlight)) : Qt::NoPen);
-    p.setBrush(isChecked() ? selected : underMouse() ? palette().color(QPalette::Button) : palette().color(QPalette::AlternateBase));
-    p.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 9, 9);
-    p.setPen(Qt::NoPen); p.setBrush(color); p.drawRoundedRect(layout.marker, 2, 2);
-    p.setFont(layout.titleFont);
-    p.setPen(palette().color(QPalette::WindowText));
-    p.drawText(layout.title, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
-               p.fontMetrics().elidedText(resourceLabel(sample->kind), Qt::ElideRight, layout.title.width()));
-    p.setFont(layout.detailFont); p.setPen(palette().color(QPalette::PlaceholderText));
-    p.drawText(layout.name, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
-               p.fontMetrics().elidedText(sample->name.simplified(), Qt::ElideRight, layout.name.width()));
-    p.setPen(color); p.setFont(layout.valueFont);
-    p.drawText(layout.usage, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
-               p.fontMetrics().elidedText(formatMetric(sample->utilization, "%"), Qt::ElideRight, layout.usage.width()));
-    p.setFont(layout.detailFont); p.setPen(palette().color(QPalette::PlaceholderText));
-    p.drawText(layout.temperature, Qt::AlignRight | Qt::AlignVCenter | Qt::TextSingleLine,
-               p.fontMetrics().elidedText(formatMetric(sample->temperature, " °C"), Qt::ElideRight, layout.temperature.width()));
-    if (hasFocus()) { p.setPen(QPen(color, 1, Qt::DashLine)); p.setBrush(Qt::NoBrush); p.drawRoundedRect(rect().adjusted(3, 3, -3, -3), 7, 7); }
+    const QPalette rowPalette = parentWidget() ? parentWidget()->palette() : palette();
+    const auto color = sample ? resourceColor(sample->kind) : rowPalette.color(QPalette::Highlight);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QRectF bounds = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    if (isChecked() || underMouse() || isDown()) {
+        const QColor surface = rowPalette.color(isChecked() ? QPalette::Base : QPalette::AlternateBase);
+        const QColor accent = rowPalette.color(QPalette::Highlight);
+        painter.setPen(isChecked() ? QPen(blendPaintColor(surface, accent, 0.22), 1) : QPen(Qt::NoPen));
+        painter.setBrush(blendPaintColor(surface, accent, isDown() ? 0.15 : isChecked() ? 0.07 : 0.06));
+        painter.drawRoundedRect(bounds, 7, 7);
+    }
+    if (isChecked()) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(chartAccentColor(color, rowPalette));
+        painter.drawRoundedRect(QRectF(2, 7, 3, qMax(0, height() - 14)), 1.5, 1.5);
+    }
+    painter.setFont(layout.summaryFont);
+    paintResourceSparkline(painter, layout.sparkline, model_->history(id_), model_->snapshot().timestamp, color, rowPalette);
+    const QColor textColor = rowPalette.color(QPalette::WindowText);
+    painter.setPen(textColor);
+    painter.setFont(layout.titleFont);
+    painter.drawText(layout.title, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
+        painter.fontMetrics().elidedText(content.title, Qt::ElideRight, qFloor(layout.title.width())));
+    painter.setFont(layout.summaryFont);
+    painter.setPen(secondaryPaintText(rowPalette));
+    QTextLayout summary(content.summary, layout.summaryFont, this);
+    layoutSummary(summary, layout.summary.width());
+    painter.save();
+    painter.setClipRect(layout.summary);
+    summary.draw(&painter, layout.summary.topLeft());
+    painter.restore();
+    if (hasFocus()) {
+        painter.setPen(QPen(rowPalette.color(QPalette::Highlight), 1, Qt::DashLine));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(bounds.adjusted(3, 3, -3, -3), 3, 3);
+    }
 }
+
 } // namespace monitor::ui

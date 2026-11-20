@@ -20,6 +20,7 @@ private slots:
     void initTestCase();
     void historyExpiresByTimeAndRemovesDevices();
     void detailSwitchesResourceAndEmitsControls();
+    void resourceSelectionSurvivesResizeNavigationAndDeviceChanges();
     void miniHasOnlyPaintedBarsAndOpensDetail();
     void narrowWindowKeepsLongPerformanceTextReachable();
     void controlsReflowWithoutShrinkingText();
@@ -34,6 +35,11 @@ Snapshot sampleSnapshot()
         sample.id = kind == ResourceKind::Cpu ? "cpu" : kind == ResourceKind::Gpu ? "gpu-test" : "memory";
         sample.name = "Test resource"; sample.utilization = Metric::available(35, "fixture");
         sample.temperature = Metric::unavailable(QStringLiteral("测试：无传感器"));
+        if (kind == ResourceKind::Memory) {
+            sample.usedBytes = 1024ULL * 1024 * 1024;
+            sample.totalBytes = 4 * *sample.usedBytes;
+            sample.utilization = Metric::available(25, "fixture");
+        }
         snapshot.resources.append(sample);
     }
     return snapshot;
@@ -53,7 +59,14 @@ void UiTests::detailSwitchesResourceAndEmitsControls()
 {
     MonitorModel model; model.acceptSnapshot(sampleSnapshot()); DetailWindow window(&model); window.show();
     QCOMPARE(window.findChildren<ResourceTile *>().size(), 3);
-    auto *gpu = window.findChildren<ResourceTile *>()[1]; QTest::mouseClick(gpu, Qt::LeftButton); QVERIFY(gpu->isChecked());
+    ResourceTile *gpu = nullptr;
+    for (auto *tile : window.findChildren<ResourceTile *>())
+        if (tile->resourceId() == "gpu-test") gpu = tile;
+    QVERIFY2(gpu && gpu->isVisible(), qPrintable(QStringLiteral("window=%1 sidebar=%2 workspace=%3 fontHeight=%4 tileCount=%5")
+        .arg(window.width()).arg(window.findChild<QWidget *>("sidebar")->width())
+        .arg(window.findChild<QScrollArea *>("resourceSelector")->parentWidget()->width())
+        .arg(window.fontMetrics().height()).arg(window.findChildren<ResourceTile *>().size())));
+    QTest::mouseClick(gpu, Qt::LeftButton); QVERIFY(gpu->isChecked());
     QSignalSpy mini(&window, &DetailWindow::miniRequested); QSignalSpy pause(&window, &DetailWindow::pauseRequested);
     QSignalSpy interval(&window, &DetailWindow::intervalRequested);
     for (auto *button : window.findChildren<QPushButton *>()) {
@@ -74,6 +87,44 @@ void UiTests::miniHasOnlyPaintedBarsAndOpensDetail()
     QTest::keyClick(&window, Qt::Key_Escape); QCOMPARE(detail.count(), 2);
     QVERIFY(!window.grab().isNull());
 }
+void UiTests::resourceSelectionSurvivesResizeNavigationAndDeviceChanges()
+{
+    MonitorModel model;
+    auto snapshot = sampleSnapshot();
+    model.acceptSnapshot(snapshot);
+    DetailWindow window(&model);
+    window.show();
+    auto *picker = window.findChild<QComboBox *>("performanceResourcePicker");
+    auto *list = window.findChild<QScrollArea *>("resourceSelector");
+    auto *toggle = window.findChild<QPushButton *>("navigationToggle");
+    auto *process = window.findChild<QPushButton *>("processNavigation");
+    auto *performance = window.findChild<QPushButton *>("performanceNavigation");
+    auto *composition = window.findChild<QWidget *>("memoryCompositionBar");
+    QVERIFY(picker && list && toggle && process && performance && composition);
+    QTRY_VERIFY(list->isVisible() && !picker->isVisible());
+    window.resize(760, 500);
+    QTRY_VERIFY(picker->isVisible() && !list->isVisible());
+    picker->setCurrentIndex(picker->findData("memory"));
+    QCOMPARE(window.selectedResource(), QStringLiteral("memory"));
+    QVERIFY(composition->isVisible());
+    QVERIFY(composition->accessibleDescription().contains("25.0%"));
+    QVERIFY(composition->accessibleDescription().contains("75.0%"));
+    QTest::mouseClick(toggle, Qt::LeftButton);
+    QVERIFY(window.navigationCollapsed());
+    QTest::mouseClick(process, Qt::LeftButton);
+    QVERIFY(window.showingProcesses() && !picker->isVisible() && !list->isVisible());
+    QTest::mouseClick(performance, Qt::LeftButton);
+    QVERIFY(performance->isChecked());
+    window.resize(1180, 780);
+    QTRY_VERIFY(list->isVisible());
+    QCOMPARE(window.selectedResource(), QStringLiteral("memory"));
+    for (auto *tile : list->findChildren<ResourceTile *>())
+        QCOMPARE(tile->isChecked(), tile->resourceId() == QStringLiteral("memory"));
+    snapshot.resources.removeLast();
+    model.acceptSnapshot(snapshot);
+    QCOMPARE(window.selectedResource(), QStringLiteral("cpu"));
+    QVERIFY(!composition->isVisible());
+}
 void UiTests::narrowWindowKeepsLongPerformanceTextReachable()
 {
     MonitorModel model; auto snapshot = sampleSnapshot();
@@ -90,7 +141,7 @@ void UiTests::narrowWindowKeepsLongPerformanceTextReachable()
     QCOMPARE(window.font().pointSizeF(), 18.0);
     QCOMPARE(window.size(), QSize(760, 500));
     for (auto *tile : window.findChildren<ResourceTile *>())
-        QVERIFY(tile->height() >= tile->heightForWidth(tile->width()));
+        if (tile->isVisible()) QVERIFY(tile->height() >= tile->heightForWidth(tile->width()));
     auto *scroll = window.findChild<QScrollArea *>("performanceScroll"); QVERIFY(scroll);
     QVERIFY(scroll->widget()->width() <= scroll->viewport()->width());
     QVERIFY(scroll->verticalScrollBar()->maximum() > 0);
@@ -101,8 +152,8 @@ void UiTests::narrowWindowKeepsLongPerformanceTextReachable()
     }
     scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
     auto *pause = window.findChild<QPushButton *>("performancePause");
-    const auto position = pause->mapTo(scroll->viewport(), QPoint(0, 0));
-    QVERIFY(scroll->viewport()->rect().contains(QRect(position, pause->size())));
+    QVERIFY(pause->isVisible());
+    QVERIFY(window.rect().contains(QRect(pause->mapTo(&window, QPoint()), pause->size())));
 }
 void UiTests::controlsReflowWithoutShrinkingText()
 {
@@ -129,7 +180,9 @@ void UiTests::resizingKeepsOneReadableScaleAcrossPages()
     auto *card = window.findChild<QLabel *>("cardValue");
     QVERIFY(table && proxy && axis && card);
     const int small = window.fontMetrics().height();
-    const int minimum = QFontMetrics(QFont(window.font().family(), 12), &window).height();
+    QFont minimumBodyFont = window.font();
+    minimumBodyFont.setPointSize(12);
+    const int minimum = QFontMetrics(minimumBodyFont, &window).height();
     QVERIFY(small >= minimum);
     for (const QSize size : {QSize(1180, 780), QSize(1600, 980), QSize(760, 500)}) {
         window.resize(size);

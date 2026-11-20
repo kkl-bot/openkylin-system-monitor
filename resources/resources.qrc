@@ -1,1 +1,8 @@
-<RCC><qresource prefix="/"><file>kylin-monitor.svg</file></qresource></RCC>
+<RCC>
+  <qresource prefix="/">
+    <file>kylin-monitor.svg</file>
+    <file>styles/chevron.svg</file>
+    <file>styles/widgets.qss</file>
+    <file>styles/light.qss</file>
+  </qresource>
+</RCC>

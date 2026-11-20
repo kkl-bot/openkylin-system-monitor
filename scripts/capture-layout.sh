@@ -6,7 +6,7 @@ if (( $# > 1 )); then
     printf 'Usage: %s [output-root]\n' "$0" >&2
     exit 2
 fi
-OUTPUT="${1:-${PROJECT_DIR}/docs/previews/typography}"
+OUTPUT="${1:-${PROJECT_DIR}/docs/previews/task-manager-1.4}"
 for theme in light dark; do
     mkdir -p "$OUTPUT/$theme"
     bash "$PROJECT_DIR/scripts/test-peony.sh" bash -c '

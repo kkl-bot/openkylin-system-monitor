@@ -29,4 +29,17 @@ const ResourceSample *MonitorModel::resource(const QString &id) const
     return nullptr;
 }
 QVector<HistoryPoint> MonitorModel::history(const QString &id) const { return histories_.value(id); }
+QString MonitorModel::resourceTitle(const ResourceSample &sample) const
+{
+    QString title = resourceLabel(sample.kind);
+    if (sample.kind != ResourceKind::Gpu) return title;
+    int count = 0, ordinal = -1;
+    for (const auto &resource : snapshot_.resources) {
+        if (resource.kind != ResourceKind::Gpu) continue;
+        if (resource.id == sample.id) ordinal = count;
+        ++count;
+    }
+    if (count > 1 && ordinal >= 0) title += QStringLiteral(" %1").arg(ordinal);
+    return title;
+}
 } // namespace monitor::ui

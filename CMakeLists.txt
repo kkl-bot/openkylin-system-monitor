@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(KylinMonitor VERSION 1.3.1 LANGUAGES CXX)
+project(KylinMonitor VERSION 1.4.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -54,15 +54,27 @@ target_link_libraries(network_backend PUBLIC Qt${QT_VERSION_MAJOR}::Core Qt${QT_
 
 add_library(monitor_ui
     src/ui/theme.cpp
+    src/ui/widget_appearance.cpp
+    src/ui/paint_palette.cpp
+    src/ui/ui_font.cpp
     src/ui/typography.cpp
     src/ui/flow_layout.cpp
     src/ui/theme_watcher.cpp
     src/ui/monitor_model.cpp
     src/ui/history_chart.cpp
     src/ui/resource_tile.cpp
+    src/ui/resource_sparkline.cpp
+    src/ui/resource_history_geometry.cpp
+    src/ui/task_navigation.cpp
+    src/ui/performance_workspace.cpp
+    src/ui/performance_page.cpp
+    src/ui/performance_metric.cpp
+    src/ui/memory_composition_bar.cpp
     src/ui/detail_window.cpp
     src/ui/process_table_model.cpp
     src/ui/process_table_view.cpp
+    src/ui/process_table_header.cpp
+    src/ui/process_heat_delegate.cpp
     src/ui/process_filter_model.cpp
     src/ui/process_details_dialog.cpp
     src/ui/process_page.cpp
@@ -107,6 +119,12 @@ if(BUILD_TESTING)
     add_executable(ui_tests tests/ui_tests.cpp)
     target_link_libraries(ui_tests PRIVATE monitor_ui Qt${QT_VERSION_MAJOR}::Test)
     add_test(NAME ui COMMAND ui_tests -platform offscreen)
+    add_executable(ui_font_tests tests/ui_font_tests.cpp)
+    target_link_libraries(ui_font_tests PRIVATE monitor_ui Qt${QT_VERSION_MAJOR}::Test)
+    add_test(NAME ui_fonts COMMAND ui_font_tests -platform offscreen)
+    add_executable(resource_tile_tests tests/resource_tile_tests.cpp)
+    target_link_libraries(resource_tile_tests PRIVATE monitor_ui Qt${QT_VERSION_MAJOR}::Test)
+    add_test(NAME resource_tiles COMMAND resource_tile_tests -platform offscreen)
     add_executable(process_backend_tests tests/process_backend_tests.cpp)
     target_link_libraries(process_backend_tests PRIVATE process_backend Qt${QT_VERSION_MAJOR}::Test)
     add_test(NAME process_backend COMMAND process_backend_tests)
@@ -142,6 +160,10 @@ if(BUILD_TESTING)
     endif()
     if(BUILD_PEONY_INTEGRATION_TESTS)
         add_subdirectory(tests/peony)
+        add_executable(widget_appearance_tests tests/widget_appearance_tests.cpp)
+        target_link_libraries(widget_appearance_tests PRIVATE monitor_ui Qt5::Test)
+        add_test(NAME widget_appearance COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test-peony.sh" "$<TARGET_FILE:widget_appearance_tests>")
+        set_tests_properties(widget_appearance PROPERTIES TIMEOUT 45)
     endif()
 endif()
 

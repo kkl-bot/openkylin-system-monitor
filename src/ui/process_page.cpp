@@ -1,9 +1,11 @@
 #include "ui/process_page.h"
 #include "ui/process_details_dialog.h"
 #include "ui/process_filter_model.h"
+#include "ui/process_heat_delegate.h"
 #include "ui/process_table_model.h"
 #include "ui/process_table_view.h"
 #include "ui/flow_layout.h"
+#include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -11,6 +13,7 @@
 #include <QFontMetrics>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QItemSelectionModel>
 #include <QLabel>
 #include <QLineEdit>
@@ -41,46 +44,70 @@ ProcessPage::ProcessPage(QWidget *parent) : QWidget(parent)
     auto *scroll = new QScrollArea(this); scroll->setObjectName(QStringLiteral("processContentScroll"));
     scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    content_ = new QWidget; scroll->setWidget(content_); outer->addWidget(scroll);
-    auto *root = new QVBoxLayout(content_); root->setContentsMargins(24, 22, 24, 18); root->setSpacing(10);
+    content_ = new QWidget; content_->setObjectName(QStringLiteral("processContent")); scroll->setWidget(content_); outer->addWidget(scroll);
+    auto *root = new QVBoxLayout(content_); root->setContentsMargins(16, 14, 16, 12); root->setSpacing(8);
     root->setSizeConstraint(QLayout::SetMinAndMaxSize);
-    root->addWidget(plainLabel(QStringLiteral("进程"), QStringLiteral("pageTitle"), this));
-    root->addWidget(plainLabel(QStringLiteral("CPU 按整机总容量计量 · 内存为驻留内存 · 点击列标题排序"), QStringLiteral("subtitle"), this));
     searchLayout_ = new QHBoxLayout;
+    title_ = plainLabel(QStringLiteral("进程"), QStringLiteral("pageTitle"), this, false);
+    searchLayout_->addWidget(title_, 0, Qt::AlignLeft);
     search_ = new QLineEdit(this); search_->setObjectName(QStringLiteral("processSearch"));
     search_->setPlaceholderText(QStringLiteral("搜索名称、PID 或用户")); search_->setClearButtonEnabled(true);
+    const auto searchIcon = QIcon::fromTheme(QStringLiteral("edit-find"));
+    if (!searchIcon.isNull()) {
+        auto *iconAction = search_->addAction(searchIcon, QLineEdit::LeadingPosition);
+        iconAction->setObjectName(QStringLiteral("processSearchIcon"));
+        iconAction->setText(QStringLiteral("搜索"));
+        iconAction->setEnabled(false); // Decoration: filtering already follows text changes.
+    }
     search_->setToolTip(search_->placeholderText());
     search_->setAccessibleName(QStringLiteral("搜索进程")); searchLayout_->addWidget(search_, 1);
     ownOnly_ = new QCheckBox(QStringLiteral("仅我的进程"), this); ownOnly_->setObjectName(QStringLiteral("processOwnOnly"));
-    searchLayout_->addWidget(ownOnly_, 0, Qt::AlignLeft); root->addLayout(searchLayout_);
-    auto *actions = new FlowLayout;
+    ownOnly_->setToolTip(QStringLiteral("按当前用户筛选进程，输入框可继续按名称、PID 或用户搜索。"));
+    root->addLayout(searchLayout_);
+    auto *commands = new QWidget(content_); commands->setObjectName(QStringLiteral("processCommandBar"));
+    auto *actions = new FlowLayout(commands, 8);
     auto *refresh = new QPushButton(QStringLiteral("刷新"), this); refresh->setObjectName(QStringLiteral("processRefresh"));
     details_ = new QPushButton(QStringLiteral("详情"), this); details_->setObjectName(QStringLiteral("processDetails"));
     terminate_ = new QPushButton(QStringLiteral("结束进程"), this); terminate_->setObjectName(QStringLiteral("processTerminate"));
+    terminate_->setProperty("textRole", QStringLiteral("section"));
+    terminate_->setProperty("actionRole", QStringLiteral("primary"));
     force_ = new QPushButton(QStringLiteral("强制结束…"), this); force_->setObjectName(QStringLiteral("processForceTerminate"));
-    actions->addWidget(refresh); actions->addWidget(details_);
-    actions->addWidget(terminate_); actions->addWidget(force_); root->addLayout(actions);
+    force_->setProperty("actionRole", QStringLiteral("danger"));
+    actions->addWidget(terminate_); actions->addWidget(details_); actions->addWidget(force_);
+    actions->addWidget(ownOnly_); actions->addWidget(refresh);
+    interval_ = new QComboBox(this); interval_->setObjectName(QStringLiteral("processInterval"));
+    interval_->setAccessibleName(QStringLiteral("进程刷新间隔")); interval_->setToolTip(QStringLiteral("自动刷新间隔"));
+    interval_->addItem(QStringLiteral("刷新：0.5 秒"), 500); interval_->addItem(QStringLiteral("刷新：1 秒"), 1000);
+    interval_->addItem(QStringLiteral("刷新：2 秒"), 2000); interval_->addItem(QStringLiteral("刷新：5 秒"), 5000); interval_->setCurrentIndex(1);
+    actions->addWidget(interval_);
+    pause_ = new QPushButton(QStringLiteral("暂停"), this); pause_->setObjectName(QStringLiteral("processPause")); pause_->setCheckable(true);
+    actions->addWidget(pause_); root->addWidget(commands);
 
     model_ = new ProcessTableModel(this); model_->setObjectName(QStringLiteral("processTableModel"));
     filter_ = new ProcessFilterModel(this); filter_->setObjectName(QStringLiteral("processFilterModel")); filter_->setSourceModel(model_);
     table_ = new ProcessTableView(this); table_->setObjectName(QStringLiteral("processTable")); table_->setModel(filter_);
+    table_->setItemDelegate(new ProcessHeatDelegate(table_));
+    table_->setAccessibleName(QStringLiteral("进程列表"));
+    table_->setAccessibleDescription(QStringLiteral("点击列标题排序；CPU 和内存底色表示当前进程的真实占比。"));
     table_->setSelectionBehavior(QAbstractItemView::SelectRows); table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers); table_->setAlternatingRowColors(true);
     table_->setShowGrid(false); table_->setWordWrap(false);
+    // Keep the main measurements beside the name on first use. A restored
+    // header state still takes precedence over this initial visual order.
+    auto *header = table_->horizontalHeader();
+    header->moveSection(header->visualIndex(ProcessTableModel::Cpu), 1);
+    header->moveSection(header->visualIndex(ProcessTableModel::Memory), 2);
     table_->setSortingEnabled(true); table_->sortByColumn(ProcessTableModel::Cpu, Qt::DescendingOrder);
     root->addWidget(table_, 1);
-    summary_ = plainLabel({}, QStringLiteral("processSummary"), this); root->addWidget(summary_);
+    auto *footer = new QHBoxLayout;
+    summary_ = plainLabel({}, QStringLiteral("processSummary"), this); footer->addWidget(summary_, 1);
+    summary_->setToolTip(QStringLiteral("CPU 按整机总容量计量；内存为驻留内存。仅可结束当前用户的普通进程。"));
+    status_ = plainLabel(QStringLiteral("等待首次进程采样"), QStringLiteral("processStatus"), this);
+    status_->setAlignment(Qt::AlignRight | Qt::AlignVCenter); footer->addWidget(status_, 1); root->addLayout(footer);
     actionResult_ = plainLabel({}, QStringLiteral("processActionResult"), this); actionResult_->hide(); root->addWidget(actionResult_);
-    status_ = plainLabel(QStringLiteral("等待首次进程采样"), QStringLiteral("processStatus"), this); root->addWidget(status_);
-    root->addWidget(plainLabel(QStringLiteral("仅可结束当前用户的普通进程"), QStringLiteral("processControlHint"), this));
-    auto *bottom = new FlowLayout;
-    bottom->addWidget(plainLabel(QStringLiteral("刷新间隔"), QStringLiteral("muted"), this, false));
-    interval_ = new QComboBox(this); interval_->setObjectName(QStringLiteral("processInterval"));
-    interval_->addItem(QStringLiteral("0.5 秒"), 500); interval_->addItem(QStringLiteral("1 秒"), 1000);
-    interval_->addItem(QStringLiteral("2 秒"), 2000); interval_->addItem(QStringLiteral("5 秒"), 5000); interval_->setCurrentIndex(1);
-    bottom->addWidget(interval_);
-    pause_ = new QPushButton(QStringLiteral("暂停"), this); pause_->setObjectName(QStringLiteral("processPause")); pause_->setCheckable(true);
-    bottom->addWidget(pause_); root->addLayout(bottom);
+
+    const QList<QWidget *> tabOrder{search_, terminate_, details_, force_, ownOnly_, refresh, interval_, pause_, table_};
+    for (int index = 1; index < tabOrder.size(); ++index) QWidget::setTabOrder(tabOrder[index - 1], tabOrder[index]);
 
     connect(search_, &QLineEdit::textChanged, filter_, &ProcessFilterModel::setSearchText);
     connect(ownOnly_, &QCheckBox::toggled, filter_, &ProcessFilterModel::setOwnProcessesOnly);
@@ -121,13 +148,14 @@ void ProcessPage::updateSearchLayout()
     if (available <= 0) return;
     const QFontMetrics metrics(search_->font(), search_);
     const int spacing = qMax(8, metrics.height() / 3);
+    const int iconWidth = search_->style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, search_);
     const int searchWidth = metrics.horizontalAdvance(search_->placeholderText())
         + metrics.horizontalAdvance(QLatin1Char('M')) * 2
-        + search_->style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, search_)
+        + iconWidth + (search_->findChild<QAction *>(QStringLiteral("processSearchIcon")) ? iconWidth + spacing : 0)
         + search_->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, search_) * 2;
-    // Keep the search readable at the inherited font size; move the filter to
-    // the next row rather than squeezing both controls into the same row.
-    const bool stack = available < searchWidth + spacing + ownOnly_->sizeHint().width();
+    // Keep the search readable at the inherited font size; a compact viewport
+    // moves it below the title while the command bar wraps independently.
+    const bool stack = available < searchWidth + spacing + title_->sizeHint().width();
     const auto direction = stack ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
     if (searchLayout_->direction() != direction) searchLayout_->setDirection(direction);
     if (searchLayout_->spacing() != spacing) searchLayout_->setSpacing(spacing);

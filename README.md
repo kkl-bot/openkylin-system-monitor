@@ -2,7 +2,15 @@
 
 C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进程管理页、网络监控页、性能曲线和 Peony 原生桌面插件**。使用 **GPL-3.0-or-later** 许可证，采集、数据模型、视图和桌面集成分层，进程与网络功能独立成文件，声明与实现分离。
 
-**1.3.1 改善字号与阅读层级**：详细窗口根据系统字体和窗口尺寸调整正文基线，标题、指标、说明与图表使用统一字体层级。进程表格、网速卡片和曲线按实际字体重新测量，窄窗口通过换行和滚动保留全部操作；详情窗口也使用相同的字体规则。
+**当前源码版本为 1.4.1。** 本轮调整独立任务管理器的视觉层级：亮色界面采用冷白、淡蓝灰与墨蓝文字，主操作使用靛蓝色，进程负载使用克制的蓝色层次；表头与内容对齐，表格保留手动列宽和排序。
+
+字体优先选择本机已安装的 **Ubuntu**（拉丁字母和数字）与 **华文黑体（STHeiti）**（中文），中文缺少该字体时回退到 **Noto Sans CJK SC** 等候选字体；不捆绑字体文件。字号仍根据系统基线、窗口大小和文字角色统一调整，支持大字体与深色模式。
+
+已交付的 1.4.0 引入任务管理器布局：左侧导航可收起，进程页将搜索和常用操作放在表格上方，名称、CPU 和内存默认排在最前，两项资源占用的底色随数值变化。
+
+在“性能 → 内存”中可以查看最近 60 秒的使用率曲线，以及当前已用和可用容量的组成条。宽窗口显示各设备的小图，窄窗口通过下拉框切换设备。刷新间隔、暂停与极简模式入口位于页面底部。[性能工作区说明](docs/performance-workspace.md)
+
+1.3.1 改善字号与阅读层级：详细窗口根据系统字体和窗口尺寸调整正文基线，标题、指标、说明与图表使用统一字体层级。进程表格、网速卡片和曲线按实际字体重新测量，窄窗口通过换行和滚动保留全部操作；详情窗口也使用相同的字体规则。
 
 1.3.0 新增网络监控：按网卡显示真实收发速度和最近 60 秒曲线，通过详细信息查看 IPv4 / IPv6、子网掩码、默认网关及 DNS 来源，分别展示桌面代理配置与本程序继承的代理环境变量。支持 `--network` 直接打开、网卡选择保存、暂停和手动刷新。使用方法、速率口径和 WSL 范围见 [网络监控说明](docs/network-monitor.md)。
 
@@ -11,9 +19,11 @@ C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进�
 1.2.1 改善窗口与文字适配：工具栏自动换行，性能卡片随可用宽度重排，长文本可滚动查看，
 进程表格按字体设置默认尺寸并保留手动列宽。验证及截图见 [窗口适配记录](docs/window-layout.md)。
 
-![任务管理器](docs/previews/typography/light/processes-1180x780.png)
+![内存性能工作区](docs/previews/task-manager-1.4/light/memory-1180x780.png)
 
-![网络监控](docs/previews/typography/light/network-1180x780.png)
+![任务管理器](docs/previews/task-manager-1.4/light/processes-1180x780.png)
+
+![网络监控](docs/previews/task-manager-1.4/light/network-1180x780.png)
 
 ![原生浅色模式](docs/previews/native/ukui-light-medium.png)
 ![原生深色模式](docs/previews/native/ukui-dark-medium.png)
@@ -43,12 +53,12 @@ cd openkylin-system-monitor
 sudo apt-get install build-essential cmake python3 qtbase5-dev qtdeclarative5-dev libqt5svg5-dev
 bash scripts/build.sh
 bash scripts/package.sh
-sudo apt install ./dist/kylin-monitor-1.3.1-linux-amd64.deb
+sudo apt install ./dist/kylin-monitor-1.4.1-linux-amd64.deb
 ```
 
 或者执行 `bash scripts/install.sh`，一次完成编译、测试、打包和安装。运行依赖由安装包声明，包含 Peony、ukui-quick 与 Qt Quick 模块。
 
-使用源码包时，解压 `kylin-monitor-1.3.1-source.tar.gz` 后进入 `kylin-monitor-1.3.1/`，执行相同构建和安装步骤。网络模块使用 Qt Network，开发文件包含在 `qtbase5-dev` 中；`nmcli` 可选，接口 DNS 不可读时使用并标明系统全局解析器配置。
+使用源码包时，解压 `kylin-monitor-1.4.1-source.tar.gz` 后进入 `kylin-monitor-1.4.1/`，执行相同构建和安装步骤。网络模块使用 Qt Network，开发文件包含在 `qtbase5-dev` 中；`nmcli` 可选，接口 DNS 不可读时使用并标明系统全局解析器配置。
 
 首次安装或升级后，**注销并重新登录 openKylin**，让 Peony 重新发现插件并加载新动态库。桌面空白处右键 → **更多插件** → **系统监测** → 选择尺寸添加，也可以从管理器拖放到桌面。三档预览与真实实例共用同一个 QML 入口。
 
@@ -61,7 +71,7 @@ sudo apt install ./dist/kylin-monitor-1.3.1-linux-amd64.deb
 - 桌面配置通常位于 `~/.config/org.ukui/peony-qt-desktop/`。不要为清理一个插件而删除整个桌面配置目录。
 - 管理器预览不读写真实实例配置，也不能执行移除、尺寸切换或打开详情等动作。
 - 详细窗口的模式、位置和刷新间隔通过独立 `QSettings` 保存。
-- 任务管理器的最后页面、表格列布局和排序也保存在 `QSettings`；进程列表、搜索词和命令行不持久化。
+- 重新打开任务管理器时，会恢复上次访问的页面、导航展开或收起状态、选中的性能资源，以及进程表格的列布局和排序。
 - 网络页所选网卡名称保存在 `QSettings`，下次启动恢复；网卡暂时消失时保留选择并显示不可用。IP、DNS、流量历史及代理信息不写入应用设置。
 - 不扫描个人文档，不上传监测数据。采样值与最近 60 秒历史仅在内存中；本项目没有便签等用户编辑内容。
 - 卸载保留用户配置；主动移除桌面实例时，由 Peony 清除该实例配置，新建实例使用默认值。
@@ -126,14 +136,14 @@ SDK 与运行库需匹配。已有对应源码头文件时，可额外指定 `-D
 执行 `bash scripts/capture-network.sh` 可生成网络页及详情截图。
 1.3.0 的历史测试结果和窗口截图见 [网络监控验证记录](docs/network-verification.md)。
 
-当前字号适配截图统一输出到 `docs/previews/typography/`，保留之前版本的截图目录。在完成构建后执行：
+1.4 系列的实际运行截图统一输出到 `docs/previews/task-manager-1.4/`，保留更早版本的截图目录。1.4.1 交付前须使用该版本构建程序重新捕获；1.4.0 的已交付 ZIP 保留原样。在完成构建后执行：
 
 ```bash
 bash scripts/capture-layout.sh
-bash scripts/capture-network.sh ./build-openkylin/network_preview ./docs/previews/typography
+bash scripts/capture-network.sh ./build-openkylin/network_preview ./docs/previews/task-manager-1.4
 ```
 
-两条命令分别生成性能 / 进程和网络页 / 详情的深浅主题截图。窗口适配截图包含 760 × 500 下的 150% 字体场景。
+两条命令分别生成 CPU / 内存 / 进程和网络页 / 详情的深浅主题截图。CPU、内存与进程均包含 760 × 500、1024 × 720、1180 × 780 三档布局，以及 760 × 500 下的 150% 字体场景。布局捕获程序先积累至少 15 秒的真实 CPU 与内存曲线，再开始截图，并检查真实采样和实际字体增幅；采样等待上限为 45 秒，整个捕获过程上限为 60 秒，不注入演示数据。
 `capture-layout.sh` 可接收一个输出根目录参数，例如 `bash scripts/capture-layout.sh /tmp/kylin-monitor-previews`。
 
 安装本项目 Debian 包、启用上述集成测试构建后，可运行完整桌面验收：
@@ -150,12 +160,12 @@ bash scripts/test-desktop.sh
 ```text
 src/domain/       公共数据模型
 src/backend/      资源 / 进程 / 网络采集、代理读取、进程控制及后台服务
-src/ui/           进程表格、网络页与网络曲线、详情、性能曲线与悬浮窗
+src/ui/           全局导航、性能工作区、进程表格、网络页、曲线与悬浮窗
 src/app/          进程 / 网络控制器、独立应用接线、托盘与设置
 plugin/           metadata.json、main.qml、qmldir
 plugin/src/       C++ QML 数据桥接、共享采样与柱条绘制
 tests/            采集、进程 / 网络界面与工作流、插件及原生框架测试
-resources/        原创 SVG 图标
+resources/        原创 SVG 图标、独立窗口样式表与控件图标
 scripts/          构建、安装、卸载、验证与源码归档
 packaging/        独立应用 desktop 入口
 docs/             架构、验收与真实截图
@@ -167,11 +177,11 @@ docs/             架构、验收与真实截图
 python3 scripts/prepare-release.py
 ```
 
-生成 `dist/kylin-monitor-1.3.1-source.tar.gz` 与 `SHA256SUMS-1.3.1.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
+生成 `dist/kylin-monitor-1.4.1-source.tar.gz` 与 `SHA256SUMS-1.4.1.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
 
-生成 Debian 包和真实截图后，执行 `python3 scripts/prepare-submission.py` 可得到同版本的 MVP ZIP，
+生成 Debian 包和真实截图后，执行 `python3 scripts/prepare-submission.py` 可得到 `dist/kylin-monitor-1.4.1-MVP-submission.zip`，
 包含完整源码、安装包、说明、截图和逐文件校验清单；发布脚本会验证 ZIP 可读及内容校验值。
-提交包的独立截图取自 `docs/previews/typography/{light,dark}/`，包括进程页、两档网络窗口、网络详情和大字体 CPU 页面；缺少当前截图时停止打包，不以历史截图替代。
+提交包的独立截图取自 `docs/previews/task-manager-1.4/{light,dark}/`，包括宽窄两档进程 / 内存 / CPU 页面、网络窗口与详情，以及三类页面的大字体场景；缺少指定截图时停止打包。该目录由 1.4 系列共用，打包前须确认图片来自本次版本的实际运行。原有 `kylin-monitor-1.4.0-MVP-submission.zip` 是历史交付物，不由本轮覆盖。
 
 项目仓库：[Gitee · openkylin-system-monitor](https://gitee.com/openkylin/openkylin-system-monitor)。源码使用 Git 管理，构建产物和安装包放在被忽略的 `dist/` 中，发布时作为发行附件提供。请勿把本机需求、凭据、用户配置或构建目录提交到仓库。
 

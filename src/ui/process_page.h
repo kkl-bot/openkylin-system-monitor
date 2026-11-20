@@ -50,6 +50,7 @@ private:
     QLabel *summary_;
     QLabel *status_;
     QLabel *actionResult_;
+    QLabel *title_;
     QPushButton *details_;
     QPushButton *terminate_;
     QPushButton *force_;
