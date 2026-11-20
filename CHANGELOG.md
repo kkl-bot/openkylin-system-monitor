@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.2 — 2026-11-20
+
+- Give the standalone desktop launcher the distinct Chinese name “Kylin Monitor 任务管理器” and identify the application/version in its window title.
+- Open the installed application by default on Windows. Pass `-Build` to rebuild and open the workspace copy, including from paths containing Chinese characters.
+- Refresh the build before launching from source, installing for the current user or packaging an existing workspace.
+- Support `--version` without a graphical display so installed and workspace versions can be checked independently.
+- Verified that the installed application menu entry and desktop shortcut both open `/usr/bin/kylin-monitor` with the 1.4.2 title. All 17 CTest suites passed on openKylin 3.0.
+
 ## 1.4.1 — 2026-11-20
 
 - Refine the standalone task manager's light appearance with cool white surfaces, blue-gray structure, ink-blue text and indigo primary actions; retain dark-mode support.

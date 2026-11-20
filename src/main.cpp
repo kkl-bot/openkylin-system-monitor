@@ -10,13 +10,17 @@
 
 int main(int argc, char *argv[])
 {
+    if (argc == 2 && (qstrcmp(argv[1], "--version") == 0 || qstrcmp(argv[1], "-v") == 0)) {
+        QTextStream(stdout) << "kylin-monitor " << KYLIN_MONITOR_VERSION << '\n';
+        return 0;
+    }
     bool probe = false;
     for (int i = 1; i < argc; ++i) if (QString::fromLocal8Bit(argv[i]) == "--probe") probe = true;
     if (probe) qputenv("QT_QPA_PLATFORM", "offscreen");
     QApplication app(argc, argv);
     Q_INIT_RESOURCE(resources);
     QApplication::setOrganizationName("KylinMonitor"); QApplication::setApplicationName("kylin-monitor");
-    QApplication::setApplicationVersion("1.4.1"); QApplication::setQuitOnLastWindowClosed(false);
+    QApplication::setApplicationVersion(QStringLiteral(KYLIN_MONITOR_VERSION)); QApplication::setQuitOnLastWindowClosed(false);
     QApplication::setWindowIcon(QIcon(":/kylin-monitor.svg"));
     monitor::ui::applyTheme(app);
     QCommandLineParser parser;

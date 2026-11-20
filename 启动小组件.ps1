@@ -1,12 +1,28 @@
 param([switch]$Mini, [switch]$Build)
 $ErrorActionPreference = 'Stop'
 $distribution = 'openKylin-3.0-desktop'
-$linuxProject = (& wsl.exe -d $distribution -- wslpath -a "$PSScriptRoot").Trim()
-if ($LASTEXITCODE -ne 0) { throw '无法找到 openKylin 中的项目路径。' }
-if ($Build) {
-    & wsl.exe -d $distribution -u openkylin -- bash "$linuxProject/scripts/build.sh"
-    if ($LASTEXITCODE -ne 0) { throw '编译或测试未通过。' }
-}
 $mode = if ($Mini) { '--mini' } else { '--detail' }
-& wsl.exe -d $distribution -u openkylin -- bash "$linuxProject/scripts/launch.sh" $mode
+# --exec preserves native arguments; WSL's default shell would consume Windows path backslashes.
+if (-not $Build) {
+    $installed = & wsl.exe -d $distribution -u openkylin --exec sh -c 'if [ -x /usr/bin/kylin-monitor ]; then printf installed; fi'
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if (($installed -join '').Trim() -eq 'installed') {
+        & wsl.exe -d $distribution -u openkylin --exec /usr/bin/kylin-monitor $mode
+        exit $LASTEXITCODE
+    }
+}
+
+# Explicit -Build, or no installed application: launch the incrementally rebuilt workspace.
+$linuxProjectOutput = & wsl.exe -d $distribution -u openkylin --exec wslpath -a "$PSScriptRoot"
+if ($LASTEXITCODE -ne 0) {
+    $pathExitCode = $LASTEXITCODE
+    [Console]::Error.WriteLine('无法找到 openKylin 中的项目路径。')
+    exit $pathExitCode
+}
+$linuxProject = ($linuxProjectOutput -join "`n").Trim()
+if ([string]::IsNullOrWhiteSpace($linuxProject)) {
+    [Console]::Error.WriteLine('openKylin 返回了空的项目路径。')
+    exit 1
+}
+& wsl.exe -d $distribution -u openkylin --exec bash "$linuxProject/scripts/launch.sh" $mode
 exit $LASTEXITCODE

@@ -2,7 +2,9 @@
 
 C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进程管理页、网络监控页、性能曲线和 Peony 原生桌面插件**。使用 **GPL-3.0-or-later** 许可证，采集、数据模型、视图和桌面集成分层，进程与网络功能独立成文件，声明与实现分离。
 
-**当前源码版本为 1.4.1。** 本轮调整独立任务管理器的视觉层级：亮色界面采用冷白、淡蓝灰与墨蓝文字，主操作使用靛蓝色，进程负载使用克制的蓝色层次；表头与内容对齐，表格保留手动列宽和排序。
+**当前源码版本为 1.4.2。** 本轮修复启动入口的识别与版本选择：桌面应用名为 **Kylin Monitor 任务管理器**，Windows 启动脚本默认打开系统安装版本，使用 `-Build` 时构建并打开工作区版本；`--version` 可在无图形显示的环境中核对程序版本。
+
+1.4.1 调整独立任务管理器的视觉层级：亮色界面采用冷白、淡蓝灰与墨蓝文字，主操作使用靛蓝色，进程负载使用克制的蓝色层次；表头与内容对齐，表格保留手动列宽和排序。
 
 字体优先选择本机已安装的 **Ubuntu**（拉丁字母和数字）与 **华文黑体（STHeiti）**（中文），中文缺少该字体时回退到 **Noto Sans CJK SC** 等候选字体；不捆绑字体文件。字号仍根据系统基线、窗口大小和文字角色统一调整，支持大字体与深色模式。
 
@@ -18,6 +20,8 @@ C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进�
 
 1.2.1 改善窗口与文字适配：工具栏自动换行，性能卡片随可用宽度重排，长文本可滚动查看，
 进程表格按字体设置默认尺寸并保留手动列宽。验证及截图见 [窗口适配记录](docs/window-layout.md)。
+
+以下任务管理器截图保留 1.4.1 的真实运行界面；1.4.2 的启动入口与版本核对方式见安装说明。
 
 ![内存性能工作区](docs/previews/task-manager-1.4/light/memory-1180x780.png)
 
@@ -53,12 +57,20 @@ cd openkylin-system-monitor
 sudo apt-get install build-essential cmake python3 qtbase5-dev qtdeclarative5-dev libqt5svg5-dev
 bash scripts/build.sh
 bash scripts/package.sh
-sudo apt install ./dist/kylin-monitor-1.4.1-linux-amd64.deb
+sudo apt install ./dist/kylin-monitor-1.4.2-linux-amd64.deb
 ```
 
 或者执行 `bash scripts/install.sh`，一次完成编译、测试、打包和安装。运行依赖由安装包声明，包含 Peony、ukui-quick 与 Qt Quick 模块。
 
-使用源码包时，解压 `kylin-monitor-1.4.1-source.tar.gz` 后进入 `kylin-monitor-1.4.1/`，执行相同构建和安装步骤。网络模块使用 Qt Network，开发文件包含在 `qtbase5-dev` 中；`nmcli` 可选，接口 DNS 不可读时使用并标明系统全局解析器配置。
+使用源码包时，解压 `kylin-monitor-1.4.2-source.tar.gz` 后进入 `kylin-monitor-1.4.2/`，执行相同构建和安装步骤。网络模块使用 Qt Network，开发文件包含在 `qtbase5-dev` 中；`nmcli` 可选，接口 DNS 不可读时使用并标明系统全局解析器配置。
+
+安装后，从应用菜单打开 **Kylin Monitor 任务管理器**。openKylin 自带的 **系统监视器** 是独立应用；本项目窗口标题包含 `Kylin Monitor` 和版本号。需要核对系统安装版本时执行：
+
+```bash
+/usr/bin/kylin-monitor --version
+```
+
+该命令不需要图形显示，可用于终端或远程会话。工作区的 `./build-openkylin/kylin-monitor --version` 反映工作区构建版本，两者可能不同。
 
 首次安装或升级后，**注销并重新登录 openKylin**，让 Peony 重新发现插件并加载新动态库。桌面空白处右键 → **更多插件** → **系统监测** → 选择尺寸添加，也可以从管理器拖放到桌面。三档预览与真实实例共用同一个 QML 入口。
 
@@ -87,7 +99,7 @@ sudo apt remove kylin-monitor
 
 包管理器移除程序、元数据、QML 模块、图标和许可文档。已加载的库可能在 Peony 进程内保留至注销，因此卸载 / 升级后重新登录；脚本不会强制结束用户桌面。重新安装并登录后可再次添加。
 
-旧版 1.0 用户级独立应用不受系统包管理器管理。`scripts/install-user.sh` 仅安装独立应用，不安装原生插件；原生部署请使用系统包。
+用户级独立应用不受系统包管理器管理。`scripts/install-user.sh` 仅将独立应用安装到当前用户的 `~/.local/`，不安装原生插件；可用 `~/.local/bin/kylin-monitor --version` 单独核对。系统包卸载不删除用户级安装，原生部署请使用系统包。
 
 ## 数据源与限制
 
@@ -136,7 +148,7 @@ SDK 与运行库需匹配。已有对应源码头文件时，可额外指定 `-D
 执行 `bash scripts/capture-network.sh` 可生成网络页及详情截图。
 1.3.0 的历史测试结果和窗口截图见 [网络监控验证记录](docs/network-verification.md)。
 
-1.4 系列的实际运行截图统一输出到 `docs/previews/task-manager-1.4/`，保留更早版本的截图目录。1.4.1 交付前须使用该版本构建程序重新捕获；1.4.0 的已交付 ZIP 保留原样。在完成构建后执行：
+1.4 系列的实际运行截图统一输出到 `docs/previews/task-manager-1.4/`，当前保留 1.4.1 的截图，更早版本的截图目录及已交付 ZIP 保留原样。需要重新捕获时，先构建待验证版本，再执行：
 
 ```bash
 bash scripts/capture-layout.sh
@@ -177,11 +189,11 @@ docs/             架构、验收与真实截图
 python3 scripts/prepare-release.py
 ```
 
-生成 `dist/kylin-monitor-1.4.1-source.tar.gz` 与 `SHA256SUMS-1.4.1.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
+生成 `dist/kylin-monitor-1.4.2-source.tar.gz` 与 `SHA256SUMS-1.4.2.txt`。同目录的本版本 Debian 包也纳入校验。公开文件白名单排除了构建目录、临时文件、Git 元数据及含环境凭据的原始需求文件，`.gitignore` 也排除了这些内容。发布二进制时需一并提供对应完整源码和构建脚本。
 
-生成 Debian 包和真实截图后，执行 `python3 scripts/prepare-submission.py` 可得到 `dist/kylin-monitor-1.4.1-MVP-submission.zip`，
+生成 Debian 包并准备真实截图后，执行 `python3 scripts/prepare-submission.py` 可得到 `dist/kylin-monitor-1.4.2-MVP-submission.zip`，
 包含完整源码、安装包、说明、截图和逐文件校验清单；发布脚本会验证 ZIP 可读及内容校验值。
-提交包的独立截图取自 `docs/previews/task-manager-1.4/{light,dark}/`，包括宽窄两档进程 / 内存 / CPU 页面、网络窗口与详情，以及三类页面的大字体场景；缺少指定截图时停止打包。该目录由 1.4 系列共用，打包前须确认图片来自本次版本的实际运行。原有 `kylin-monitor-1.4.0-MVP-submission.zip` 是历史交付物，不由本轮覆盖。
+提交包的独立截图取自 `docs/previews/task-manager-1.4/{light,dark}/`，包括宽窄两档进程 / 内存 / CPU 页面、网络窗口与详情，以及三类页面的大字体场景；缺少指定截图时停止打包。1.4.2 入口修复版沿用标明来源的 1.4.1 真实界面截图。原有 `kylin-monitor-1.4.1-MVP-submission.zip` 及更早交付物保留，不由本轮覆盖。
 
 项目仓库：[Gitee · openkylin-system-monitor](https://gitee.com/openkylin/openkylin-system-monitor)。源码使用 Git 管理，构建产物和安装包放在被忽略的 `dist/` 中，发布时作为发行附件提供。请勿把本机需求、凭据、用户配置或构建目录提交到仓库。
 
@@ -195,10 +207,21 @@ python3 scripts/prepare-release.py
 /usr/bin/kylin-monitor --network
 /usr/bin/kylin-monitor --mini
 /usr/bin/kylin-monitor --probe
+/usr/bin/kylin-monitor --version
 ```
 
 `--network` 直接进入独立任务管理器的网络页。`--mini` 保留原先的独立置顶悬浮窗。
 `--probe` 输出两次 CPU / GPU / 内存真实采样后的 JSON，缺失为 `null` 并附原因；该选项不输出网络或进程清单。
+
+在 Windows PowerShell 中，从仓库目录运行：
+
+```powershell
+.\启动小组件.ps1
+.\启动小组件.ps1 -Mini
+.\启动小组件.ps1 -Build
+```
+
+默认使用 openKylin 中已安装的 `/usr/bin/kylin-monitor`；`-Mini` 打开该版本的柱状图悬浮窗。`-Build` 编译工作区并启动 `build-openkylin/kylin-monitor`，可与 `-Mini` 组合。工作区构建不会替换系统安装版本，更新系统版本需安装对应 Debian 包。
 
 ## 许可与参考
 

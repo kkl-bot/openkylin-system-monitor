@@ -15,7 +15,9 @@ namespace monitor::ui {
 DetailWindow::DetailWindow(MonitorModel *model, QWidget *parent) : QWidget(parent)
 {
     setObjectName("detailWindow");
-    setWindowTitle(tr("系统监测 · Kylin Monitor"));
+    const QString name = tr("Kylin Monitor 任务管理器");
+    const QString version = QApplication::applicationVersion();
+    setWindowTitle(version.isEmpty() ? name : tr("%1 · %2").arg(name, version));
     resize(1180, 780);
     setMinimumSize(760, 500);
     auto *root = new QHBoxLayout(this);

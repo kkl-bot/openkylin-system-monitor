@@ -89,9 +89,12 @@ with LOG.open("w") as log:
         screenshot("desktop-added")
         # The native surface observes double-clicks while leaving dragging to Peony.
         pointer("mousemove", 1180, 80, "click", "--repeat", 2, "--delay", 100, 1)
+        version = run("/usr/bin/kylin-monitor", "--version").strip().split()[-1]
+        title = f"Kylin Monitor 任务管理器 · {version}"
         def detail_window():
-            found = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "系统监测 · Kylin Monitor"], capture_output=True, text=True)
-            return found.stdout.splitlines() if found.returncode == 0 else []
+            found = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "^kylin-monitor$"],
+                                   capture_output=True, text=True)
+            return [window for window in found.stdout.splitlines() if pointer("getwindowname", window).strip() == title]
         wait_for(detail_window)
         detail_id = detail_window()[0]
         detail_pid = int(pointer("getwindowpid", detail_id).strip())

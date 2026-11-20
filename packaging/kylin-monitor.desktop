@@ -1,10 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=Kylin Monitor
-Name[zh_CN]=任务管理器与系统监测
+Name=Kylin Monitor Task Manager
+Name[zh_CN]=Kylin Monitor 任务管理器
 Comment=Task manager with process control and CPU, GPU and memory monitoring
 Comment[zh_CN]=进程管理、CPU、GPU 与内存监测
-Exec=kylin-monitor --detail
+Exec=/usr/bin/kylin-monitor --detail
+TryExec=/usr/bin/kylin-monitor
 Icon=kylin-monitor
 Terminal=false
 Categories=System;Monitor;

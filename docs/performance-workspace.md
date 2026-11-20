@@ -3,6 +3,11 @@
 任务管理器将全局页面导航与性能资源选择分开。在“性能”页查看 CPU、内存和 GPU；
 宽窗口显示资源列表，较窄窗口使用顶部下拉框切换。进程页和网络页继续使用各自的采样与控制器。
 
+1.4.2 的桌面应用入口名为 **Kylin Monitor 任务管理器**。openKylin 自带的“系统监视器”是独立应用，
+Peony 插件管理器中的本项目仍名为“系统监测”。可核对窗口标题中的 `Kylin Monitor` 和版本号，
+或在无需图形显示的终端执行 `/usr/bin/kylin-monitor --version`，确认系统安装版本。
+Windows 的 `启动小组件.ps1` 默认打开系统安装版本，`-Build` 构建并打开工作区版本。
+
 ## 资源详情
 
 资源名称、容量或设备信息位于顶部，紧接最近 60 秒的利用率主图。
@@ -49,7 +54,8 @@ bash scripts/capture-network.sh ./build-openkylin/network_preview ./docs/preview
 ```
 
 两条脚本使用隔离的显示、主题与配置目录。截图输出到 `docs/previews/task-manager-1.4/light/`
-和 `dark/`，目录名表示 1.4 系列；以前的 `typography/`、`window-layout/`、`network/` 截图保留。
+和 `dark/`，目录名表示 1.4 系列；当前截图来自 1.4.1 的实际运行，1.4.2 入口修复版沿用这些界面截图。
+以前的 `typography/`、`window-layout/`、`network/` 截图及 1.4.1 已交付发布包保留。
 
 布局捕获包含 CPU、内存和进程的 760 × 500、1024 × 720、1180 × 780 窗口，
 以及三类页面在 760 × 500 下的 150% 字体场景。程序先等待 CPU 和内存均积累至少 16 个连续有效采样、
@@ -58,13 +64,13 @@ bash scripts/capture-network.sh ./build-openkylin/network_preview ./docs/preview
 程序检查内存容量是否有效、进程快照是否到达，并测量真实表格字体高度；条件不满足时停止保存对应截图。
 
 安装包生成后，`python3 scripts/prepare-submission.py` 将当前版本源码、Debian 包、说明
-和这些目录中的精选截图组成 `kylin-monitor-1.4.1-MVP-submission.zip`。缺少指定截图时停止打包。
+和这些目录中的精选截图组成 `kylin-monitor-1.4.2-MVP-submission.zip`。缺少指定截图时停止打包。
 
 以下为 **1.4.0 的历史验证**：2026-11-20 在 openKylin 3.0 WSL 2 上完成 Release 构建，14 组 CTest 测试全部通过。
 运行截图覆盖 UKUI 深浅主题、上述三种窗口尺寸和 150% 字体。测试还覆盖跨页面保留所选资源、
 设备移除后的资源切换、真实子进程操作、网络详情及 Peony 插件加载。
 
-1.4.1 在 openKylin 3.0 完成 Release 构建，16 组 CTest 测试全部通过。
+以下为 **1.4.1 的历史验证**：在 openKylin 3.0 完成 Release 构建，16 组 CTest 测试全部通过。
 在同一打开的进程窗口中完成了 UKUI 亮色 → 深色 → 亮色切换。亮色选中行为靛蓝底
 （`#4557b4`）白字，对比度为 6.41∶1。字体渲染检查确认英文和数字使用 Ubuntu，中文使用华文黑体，
 缺字由 Noto Sans CJK SC 补齐。三个窗口尺寸及大字体场景的截图均来自该版程序。

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(KylinMonitor VERSION 1.4.1 LANGUAGES CXX)
+project(KylinMonitor VERSION 1.4.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -93,6 +93,7 @@ add_library(monitor_ui
 target_link_libraries(monitor_ui PUBLIC monitor_backend process_backend network_backend Qt${QT_VERSION_MAJOR}::Widgets PRIVATE Qt${QT_VERSION_MAJOR}::DBus)
 
 add_executable(kylin-monitor src/main.cpp)
+target_compile_definitions(kylin-monitor PRIVATE KYLIN_MONITOR_VERSION="${PROJECT_VERSION}")
 target_link_libraries(kylin-monitor PRIVATE monitor_ui)
 if(BUILD_PEONY_PLUGIN)
     add_subdirectory(plugin)
@@ -109,6 +110,9 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test)
+    add_test(NAME cli_version COMMAND ${CMAKE_COMMAND} -E env --unset=DISPLAY
+        --unset=WAYLAND_DISPLAY QT_QPA_PLATFORM=xcb $<TARGET_FILE:kylin-monitor> --version)
+    set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "kylin-monitor ${PROJECT_VERSION}")
     add_executable(layout_preview tests/layout_preview.cpp)
     target_link_libraries(layout_preview PRIVATE monitor_ui)
     add_executable(network_preview tests/network_preview.cpp)
