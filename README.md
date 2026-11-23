@@ -52,7 +52,7 @@ C++17 编写的任务管理器与 CPU、GPU、内存监测工具，包含**进�
 在 openKylin 内执行：
 
 ```bash
-git clone https://gitee.com/openkylin/openkylin-system-monitor.git
+git clone https://github.com/kkl-bot/openkylin-system-monitor.git
 cd openkylin-system-monitor
 sudo apt-get install build-essential cmake python3 qtbase5-dev qtdeclarative5-dev libqt5svg5-dev
 bash scripts/build.sh
